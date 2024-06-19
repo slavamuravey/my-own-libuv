@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "uv.h": "c",
+        "stdlib.h": "c"
+    }
+}
