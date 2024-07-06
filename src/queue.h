@@ -60,10 +60,11 @@ static inline void uv__queue_split(struct uv__queue* h,
 }
 
 static inline void uv__queue_move(struct uv__queue* h, struct uv__queue* n) {
-  if (uv__queue_empty(h))
+  if (uv__queue_empty(h)) {
     uv__queue_init(n);
-  else
+  } else {
     uv__queue_split(h, h->next, n);
+  }
 }
 
 static inline void uv__queue_insert_head(struct uv__queue* h,

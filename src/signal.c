@@ -63,15 +63,17 @@ RB_GENERATE_STATIC(uv__signal_tree_s,
 static void uv__signal_global_reinit(void);
 
 static void uv__signal_global_init(void) {
-  if (uv__signal_lock_pipefd[0] == -1)
+  if (uv__signal_lock_pipefd[0] == -1) {
     /* pthread_atfork can register before and after handlers, one
      * for each child. This only registers one for the child. That
      * state is both persistent and cumulative, so if we keep doing
      * it the handler functions will be called multiple times. Thus
      * we only want to do it once.
      */
-    if (pthread_atfork(NULL, NULL, &uv__signal_global_reinit))
+    if (pthread_atfork(NULL, NULL, &uv__signal_global_reinit)) {
       abort();
+    }
+  }
 
   uv__signal_global_reinit();
 }
@@ -100,11 +102,13 @@ void uv__signal_cleanup(void) {
 static void uv__signal_global_reinit(void) {
   uv__signal_cleanup();
 
-  if (uv__make_pipe(uv__signal_lock_pipefd, 0))
+  if (uv__make_pipe(uv__signal_lock_pipefd, 0)) {
     abort();
+  }
 
-  if (uv__signal_unlock())
+  if (uv__signal_unlock()) {
     abort();
+  }
 }
 
 
@@ -140,25 +144,30 @@ static int uv__signal_unlock(void) {
 static void uv__signal_block_and_lock(sigset_t* saved_sigmask) {
   sigset_t new_mask;
 
-  if (sigfillset(&new_mask))
+  if (sigfillset(&new_mask)) {
     abort();
+  }
 
   /* to shut up valgrind */
   sigemptyset(saved_sigmask);
-  if (pthread_sigmask(SIG_SETMASK, &new_mask, saved_sigmask))
+  if (pthread_sigmask(SIG_SETMASK, &new_mask, saved_sigmask)) {
     abort();
+  }
 
-  if (uv__signal_lock())
+  if (uv__signal_lock()) {
     abort();
+  }
 }
 
 
 static void uv__signal_unlock_and_unblock(sigset_t* saved_sigmask) {
-  if (uv__signal_unlock())
+  if (uv__signal_unlock()) {
     abort();
+  }
 
-  if (pthread_sigmask(SIG_SETMASK, saved_sigmask, NULL))
+  if (pthread_sigmask(SIG_SETMASK, saved_sigmask, NULL)) {
     abort();
+  }
 }
 
 
@@ -173,8 +182,9 @@ static uv_signal_t* uv__signal_first_handle(int signum) {
 
   handle = RB_NFIND(uv__signal_tree_s, &uv__signal_tree, &lookup);
 
-  if (handle != NULL && handle->signum == signum)
+  if (handle != NULL && handle->signum == signum) {
     return handle;
+  }
 
   return NULL;
 }
@@ -209,11 +219,11 @@ static void uv__signal_handler(int signum) {
       r = write(handle->loop->signal_pipefd[1], &msg, sizeof msg);
     } while (r == -1 && errno == EINTR);
 
-    assert(r == sizeof msg ||
-           (r == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)));
+    assert(r == sizeof msg || (r == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)));
 
-    if (r != -1)
+    if (r != -1) {
       handle->caught_signals++;
+    }
   }
 
   uv__signal_unlock();
@@ -227,16 +237,19 @@ static int uv__signal_register_handler(int signum, int oneshot) {
 
   /* XXX use a separate signal stack? */
   memset(&sa, 0, sizeof(sa));
-  if (sigfillset(&sa.sa_mask))
+  if (sigfillset(&sa.sa_mask)) {
     abort();
+  }
   sa.sa_handler = uv__signal_handler;
   sa.sa_flags = SA_RESTART;
-  if (oneshot)
+  if (oneshot) {
     sa.sa_flags |= SA_RESETHAND;
+  }
 
   /* XXX save old action so we can restore it later on? */
-  if (sigaction(signum, &sa, NULL))
+  if (sigaction(signum, &sa, NULL)) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -253,8 +266,9 @@ static void uv__signal_unregister_handler(int signum) {
    * signal implies that it was successfully registered earlier, so EINVAL
    * should never happen.
    */
-  if (sigaction(signum, &sa, NULL))
+  if (sigaction(signum, &sa, NULL)) {
     abort();
+  }
 }
 
 
@@ -262,16 +276,16 @@ static int uv__signal_loop_once_init(uv_loop_t* loop) {
   int err;
 
   /* Return if already initialized. */
-  if (loop->signal_pipefd[0] != -1)
+  if (loop->signal_pipefd[0] != -1) {
     return 0;
+  }
 
   err = uv__make_pipe(loop->signal_pipefd, UV_NONBLOCK_PIPE);
-  if (err)
+  if (err) {
     return err;
+  }
 
-  uv__io_init(&loop->signal_io_watcher,
-              uv__signal_event,
-              loop->signal_pipefd[0]);
+  uv__io_init(&loop->signal_io_watcher, uv__signal_event, loop->signal_pipefd[0]);
   uv__io_start(loop, &loop->signal_io_watcher, POLLIN);
 
   return 0;
@@ -281,8 +295,9 @@ static int uv__signal_loop_once_init(uv_loop_t* loop) {
 int uv__signal_loop_fork(uv_loop_t* loop) {
   struct uv__queue* q;
 
-  if (loop->signal_pipefd[0] == -1)
+  if (loop->signal_pipefd[0] == -1) {
     return 0;
+  }
   uv__io_stop(loop, &loop->signal_io_watcher, POLLIN);
   uv__close(loop->signal_pipefd[0]);
   uv__close(loop->signal_pipefd[1]);
@@ -293,8 +308,9 @@ int uv__signal_loop_fork(uv_loop_t* loop) {
     uv_handle_t* handle = uv__queue_data(q, uv_handle_t, handle_queue);
     uv_signal_t* sh;
 
-    if (handle->type != UV_SIGNAL)
+    if (handle->type != UV_SIGNAL) {
       continue;
+    }
 
     sh = (uv_signal_t*) handle;
     sh->caught_signals = 0;
@@ -317,8 +333,9 @@ void uv__signal_loop_cleanup(uv_loop_t* loop) {
   uv__queue_foreach(q, &loop->handle_queue) {
     uv_handle_t* handle = uv__queue_data(q, uv_handle_t, handle_queue);
 
-    if (handle->type == UV_SIGNAL)
+    if (handle->type == UV_SIGNAL) {
       uv__signal_stop((uv_signal_t*) handle);
+    }
   }
 
   if (loop->signal_pipefd[0] != -1) {
@@ -337,8 +354,9 @@ int uv_signal_init(uv_loop_t* loop, uv_signal_t* handle) {
   int err;
 
   err = uv__signal_loop_once_init(loop);
-  if (err)
+  if (err) {
     return err;
+  }
 
   uv__handle_init(loop, (uv_handle_t*) handle, UV_SIGNAL);
   handle->signum = 0;
@@ -359,17 +377,12 @@ int uv_signal_start(uv_signal_t* handle, uv_signal_cb signal_cb, int signum) {
 }
 
 
-int uv_signal_start_oneshot(uv_signal_t* handle,
-                            uv_signal_cb signal_cb,
-                            int signum) {
+int uv_signal_start_oneshot(uv_signal_t* handle, uv_signal_cb signal_cb, int signum) {
   return uv__signal_start(handle, signal_cb, signum, 1);
 }
 
 
-static int uv__signal_start(uv_signal_t* handle,
-                            uv_signal_cb signal_cb,
-                            int signum,
-                            int oneshot) {
+static int uv__signal_start(uv_signal_t* handle, uv_signal_cb signal_cb, int signum, int oneshot) {
   sigset_t saved_sigmask;
   int err;
   uv_signal_t* first_handle;
@@ -380,8 +393,9 @@ static int uv__signal_start(uv_signal_t* handle,
    * signum is otherwise invalid then uv__signal_register will find out
    * eventually.
    */
-  if (signum == 0)
+  if (signum == 0) {
     return UV_EINVAL;
+  }
 
   /* Short circuit: if the signal watcher is already watching {signum} don't
    * go through the process of deregistering and registering the handler.
@@ -405,8 +419,7 @@ static int uv__signal_start(uv_signal_t* handle,
    * Also in case there's only one-shot handlers and a regular handler comes in.
    */
   first_handle = uv__signal_first_handle(signum);
-  if (first_handle == NULL ||
-      (!oneshot && (first_handle->flags & UV_SIGNAL_ONE_SHOT))) {
+  if (first_handle == NULL || (!oneshot && (first_handle->flags & UV_SIGNAL_ONE_SHOT))) {
     err = uv__signal_register_handler(signum, oneshot);
     if (err) {
       /* Registering the signal handler failed. Must be an invalid signal. */
@@ -416,8 +429,9 @@ static int uv__signal_start(uv_signal_t* handle,
   }
 
   handle->signum = signum;
-  if (oneshot)
+  if (oneshot) {
     handle->flags |= UV_SIGNAL_ONE_SHOT;
+  }
 
   RB_INSERT(uv__signal_tree_s, &uv__signal_tree, handle);
 
@@ -430,9 +444,7 @@ static int uv__signal_start(uv_signal_t* handle,
 }
 
 
-static void uv__signal_event(uv_loop_t* loop,
-                             uv__io_t* w,
-                             unsigned int events) {
+static void uv__signal_event(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   uv__signal_msg_t* msg;
   uv_signal_t* handle;
   char buf[sizeof(uv__signal_msg_t) * 32];
@@ -445,24 +457,27 @@ static void uv__signal_event(uv_loop_t* loop,
   do {
     r = read(loop->signal_pipefd[0], buf + bytes, sizeof(buf) - bytes);
 
-    if (r == -1 && errno == EINTR)
+    if (r == -1 && errno == EINTR) {
       continue;
+    }
 
     if (r == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
       /* If there are bytes in the buffer already (which really is extremely
        * unlikely if possible at all) we can't exit the function here. We'll
        * spin until more bytes are read instead.
        */
-      if (bytes > 0)
+      if (bytes > 0) {
         continue;
+      }
 
       /* Otherwise, there was nothing there. */
       return;
     }
 
     /* Other errors really should never happen. */
-    if (r == -1)
+    if (r == -1) {
       abort();
+    }
 
     bytes += r;
 
@@ -480,8 +495,9 @@ static void uv__signal_event(uv_loop_t* loop,
 
       handle->dispatched_signals++;
 
-      if (handle->flags & UV_SIGNAL_ONE_SHOT)
+      if (handle->flags & UV_SIGNAL_ONE_SHOT) {
         uv__signal_stop(handle);
+      }
     }
 
     bytes -= end;
@@ -543,8 +559,9 @@ static void uv__signal_stop(uv_signal_t* handle) {
   int ret;
 
   /* If the watcher wasn't started, this is a no-op. */
-  if (handle->signum == 0)
+  if (handle->signum == 0) {
     return;
+  }
 
   uv__signal_block_and_lock(&saved_sigmask);
 

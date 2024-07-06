@@ -50,8 +50,9 @@ char** uv_setup_args(int argc, char** argv) {
   char* s;
   int i;
 
-  if (argc <= 0)
+  if (argc <= 0) {
     return argv;
+  }
 
   pt.str = argv[0];
   pt.len = strlen(argv[0]);
@@ -59,15 +60,17 @@ char** uv_setup_args(int argc, char** argv) {
 
   /* Calculate how much memory we need for the argv strings. */
   size = pt.cap;
-  for (i = 1; i < argc; i++)
+  for (i = 1; i < argc; i++) {
     size += strlen(argv[i]) + 1;
+  }
 
   /* Add space for the argv pointers. */
   size += (argc + 1) * sizeof(char*);
 
   new_argv = uv__malloc(size);
-  if (new_argv == NULL)
+  if (new_argv == NULL) {
     return argv;
+  }
 
   /* Copy over the strings and set up the pointer table. */
   i = 0;
@@ -98,8 +101,9 @@ int uv_set_process_title(const char* title) {
   size_t len;
 
   /* If uv_setup_args wasn't called or failed, we can't continue. */
-  if (args_mem == NULL)
+  if (args_mem == NULL) {
     return UV_ENOBUFS;
+  }
 
   pt = &process_title;
   len = strlen(title);
@@ -109,8 +113,9 @@ int uv_set_process_title(const char* title) {
 
   if (len >= pt->cap) {
     len = 0;
-    if (pt->cap > 0)
+    if (pt->cap > 0) {
       len = pt->cap - 1;
+    }
   }
 
   memcpy(pt->str, title, len);
@@ -125,12 +130,14 @@ int uv_set_process_title(const char* title) {
 
 
 int uv_get_process_title(char* buffer, size_t size) {
-  if (buffer == NULL || size == 0)
+  if (buffer == NULL || size == 0) {
     return UV_EINVAL;
+  }
 
   /* If uv_setup_args wasn't called or failed, we can't continue. */
-  if (args_mem == NULL)
+  if (args_mem == NULL) {
     return UV_ENOBUFS;
+  }
 
   uv_once(&process_title_mutex_once, init_process_title_mutex_once);
   uv_mutex_lock(&process_title_mutex);
@@ -140,8 +147,9 @@ int uv_get_process_title(char* buffer, size_t size) {
     return UV_ENOBUFS;
   }
 
-  if (process_title.len != 0)
+  if (process_title.len != 0) {
     memcpy(buffer, process_title.str, process_title.len + 1);
+  }
 
   buffer[process_title.len] = '\0';
 

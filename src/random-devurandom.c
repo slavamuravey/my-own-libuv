@@ -37,8 +37,9 @@ int uv__random_readpath(const char* path, void* buf, size_t buflen) {
 
   fd = uv__open_cloexec(path, O_RDONLY);
 
-  if (fd < 0)
+  if (fd < 0) {
     return fd;
+  }
 
   if (uv__fstat(fd, &s)) {
     uv__close(fd);
@@ -51,9 +52,9 @@ int uv__random_readpath(const char* path, void* buf, size_t buflen) {
   }
 
   for (pos = 0; pos != buflen; pos += n) {
-    do
+    do {
       n = read(fd, (char*) buf + pos, buflen - pos);
-    while (n == -1 && errno == EINTR);
+    } while (n == -1 && errno == EINTR);
 
     if (n == -1) {
       uv__close(fd);
@@ -86,8 +87,9 @@ static void uv__random_devurandom_init(void) {
 int uv__random_devurandom(void* buf, size_t buflen) {
   uv_once(&once, uv__random_devurandom_init);
 
-  if (status != 0)
+  if (status != 0) {
     return status;
+  }
 
   return uv__random_readpath("/dev/urandom", buf, buflen);
 }

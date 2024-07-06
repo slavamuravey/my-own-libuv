@@ -68,8 +68,9 @@ int uv__random_sysctl(void* buf, size_t buflen) {
      * have a SYS__sysctl define either.
      */
 #ifdef SYS__sysctl
-    if (syscall(SYS__sysctl, &args) == -1)
+    if (syscall(SYS__sysctl, &args) == -1) {
       return UV__ERR(errno);
+    }
 #else
     {
       (void) &args;
@@ -77,8 +78,9 @@ int uv__random_sysctl(void* buf, size_t buflen) {
     }
 #endif
 
-    if (n != sizeof(uuid))
+    if (n != sizeof(uuid)) {
       return UV_EIO;  /* Can't happen. */
+    }
 
     /* uuid[] is now a type 4 UUID. Bytes 6 and 8 (counting from zero) contain
      * 4 and 5 bits of entropy, respectively. For ease of use, we skip those
@@ -88,8 +90,9 @@ int uv__random_sysctl(void* buf, size_t buflen) {
     uuid[8] = uuid[15];
 
     n = pe - p;
-    if (n > 14)
+    if (n > 14) {
       n = 14;
+    }
 
     memcpy(p, uuid, n);
     p += n;
