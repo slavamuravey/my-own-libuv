@@ -89,16 +89,14 @@ union uv__sockaddr {
   do {                                                                        \
     assert(0 && "unreachable code");                                          \
     abort();                                                                  \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define SAVE_ERRNO(block)                                                     \
   do {                                                                        \
     int _saved_errno = errno;                                                 \
     do { block; } while (0);                                                  \
     errno = _saved_errno;                                                     \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 /* The __clang__ and __INTEL_COMPILER checks are superfluous because they
  * define __GNUC__. They are here to convey to you, dear reader, that these
@@ -229,8 +227,7 @@ void uv__run_check(uv_loop_t* loop);
 void uv__run_prepare(uv_loop_t* loop);
 
 /* stream */
-void uv__stream_init(uv_loop_t* loop, uv_stream_t* stream,
-    uv_handle_type type);
+void uv__stream_init(uv_loop_t* loop, uv_stream_t* stream, uv_handle_type type);
 int uv__stream_open(uv_stream_t*, int fd, int flags);
 void uv__stream_destroy(uv_stream_t* stream);
 void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events);
@@ -288,20 +285,13 @@ int uv__random_sysctl(void* buf, size_t buflen);
 
 /* io_uring */
 int uv__iou_fs_close(uv_loop_t* loop, uv_fs_t* req);
-int uv__iou_fs_fsync_or_fdatasync(uv_loop_t* loop,
-                                  uv_fs_t* req,
-                                  uint32_t fsync_flags);
+int uv__iou_fs_fsync_or_fdatasync(uv_loop_t* loop, uv_fs_t* req, uint32_t fsync_flags);
 int uv__iou_fs_link(uv_loop_t* loop, uv_fs_t* req);
 int uv__iou_fs_mkdir(uv_loop_t* loop, uv_fs_t* req);
 int uv__iou_fs_open(uv_loop_t* loop, uv_fs_t* req);
-int uv__iou_fs_read_or_write(uv_loop_t* loop,
-                             uv_fs_t* req,
-                             int is_read);
+int uv__iou_fs_read_or_write(uv_loop_t* loop, uv_fs_t* req, int is_read);
 int uv__iou_fs_rename(uv_loop_t* loop, uv_fs_t* req);
-int uv__iou_fs_statx(uv_loop_t* loop,
-                     uv_fs_t* req,
-                     int is_fstat,
-                     int is_lstat);
+int uv__iou_fs_statx(uv_loop_t* loop, uv_fs_t* req, int is_fstat, int is_lstat);
 int uv__iou_fs_symlink(uv_loop_t* loop, uv_fs_t* req);
 int uv__iou_fs_unlink(uv_loop_t* loop, uv_fs_t* req);
 
@@ -319,8 +309,9 @@ UV_UNUSED(static char* uv__basename_r(const char* path)) {
   char* s;
 
   s = strrchr(path, '/');
-  if (s == NULL)
+  if (s == NULL) {
     return (char*) path;
+  }
 
   return s + 1;
 }
@@ -329,8 +320,9 @@ UV_UNUSED(static int uv__fstat(int fd, struct stat* s)) {
   int rc;
 
   rc = fstat(fd, s);
-  if (rc >= 0)
+  if (rc >= 0) {
     uv__msan_unpoison(s, sizeof(*s));
+  }
 
   return rc;
 }
@@ -339,8 +331,9 @@ UV_UNUSED(static int uv__lstat(const char* path, struct stat* s)) {
   int rc;
 
   rc = lstat(path, s);
-  if (rc >= 0)
+  if (rc >= 0) {
     uv__msan_unpoison(s, sizeof(*s));
+  }
 
   return rc;
 }
@@ -349,34 +342,23 @@ UV_UNUSED(static int uv__stat(const char* path, struct stat* s)) {
   int rc;
 
   rc = stat(path, s);
-  if (rc >= 0)
+  if (rc >= 0) {
     uv__msan_unpoison(s, sizeof(*s));
+  }
 
   return rc;
 }
 
 void uv__fs_post(uv_loop_t* loop, uv_fs_t* req);
-ssize_t uv__fs_copy_file_range(int fd_in,
-                       off_t* off_in,
-                       int fd_out,
-                       off_t* off_out,
-                       size_t len,
-                       unsigned int flags);
-int uv__statx(int dirfd,
-              const char* path,
-              int flags,
-              unsigned int mask,
-              struct uv__statx* statxbuf);
+ssize_t uv__fs_copy_file_range(int fd_in, off_t* off_in, int fd_out, off_t* off_out, size_t len, unsigned int flags);
+int uv__statx(int dirfd, const char* path, int flags, unsigned int mask, struct uv__statx* statxbuf);
 void uv__statx_to_stat(const struct uv__statx* statxbuf, uv_stat_t* buf);
 ssize_t uv__getrandom(void* buf, size_t buflen, unsigned flags);
 unsigned uv__kernel_version(void);
 
 typedef int (*uv__peersockfunc)(int, struct sockaddr*, socklen_t*);
 
-int uv__getsockpeername(const uv_handle_t* handle,
-                        uv__peersockfunc func,
-                        struct sockaddr* name,
-                        int* namelen);
+int uv__getsockpeername(const uv_handle_t* handle, uv__peersockfunc func, struct sockaddr* name, int* namelen);
 
 #define UV__CPU_AFFINITY_SUPPORTED 1
 

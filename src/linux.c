@@ -269,17 +269,11 @@ struct watcher_root {
 };
 
 static int uv__inotify_fork(uv_loop_t* loop, struct watcher_list* root);
-static void uv__inotify_read(uv_loop_t* loop,
-                             uv__io_t* w,
-                             unsigned int revents);
-static int compare_watchers(const struct watcher_list* a,
-                            const struct watcher_list* b);
-static void maybe_free_watcher_list(struct watcher_list* w,
-                                    uv_loop_t* loop);
+static void uv__inotify_read(uv_loop_t* loop, uv__io_t* w, unsigned int revents);
+static int compare_watchers(const struct watcher_list* a, const struct watcher_list* b);
+static void maybe_free_watcher_list(struct watcher_list* w, uv_loop_t* loop);
 
-static void uv__epoll_ctl_flush(int epollfd,
-                                struct uv__iou* ctl,
-                                struct epoll_event (*events)[256]);
+static void uv__epoll_ctl_flush(int epollfd, struct uv__iou* ctl, struct epoll_event (*events)[256]);
 
 static void uv__epoll_ctl_prep(int epollfd,
                                struct uv__iou* ctl,
@@ -312,8 +306,9 @@ unsigned uv__kernel_version(void) {
   char* needle;
 
   version = atomic_load_explicit(&cached_version, memory_order_relaxed);
-  if (version != 0)
+  if (version != 0) {
     return version;
+  }
 
   /* Check /proc/version_signature first as it's the way to get the mainline
    * kernel version in Ubuntu. The format is:
@@ -321,24 +316,30 @@ unsigned uv__kernel_version(void) {
    * For example:
    *   Ubuntu 5.15.0-79.86-generic 5.15.111
    */
-  if (0 == uv__slurp("/proc/version_signature", v_sig, sizeof(v_sig)))
-    if (3 == sscanf(v_sig, "Ubuntu %*s %u.%u.%u", &major, &minor, &patch))
+  if (0 == uv__slurp("/proc/version_signature", v_sig, sizeof(v_sig))) {
+    if (3 == sscanf(v_sig, "Ubuntu %*s %u.%u.%u", &major, &minor, &patch)) {
       goto calculate_version;
+    }
+  }
 
-  if (-1 == uname(&u))
+  if (-1 == uname(&u)) {
     return 0;
+  }
 
   /* In Debian we need to check `version` instead of `release` to extract the
    * mainline kernel version. This is an example of how it looks like:
    *  #1 SMP Debian 5.10.46-4 (2021-08-03)
    */
   needle = strstr(u.version, "Debian ");
-  if (needle != NULL)
-    if (3 == sscanf(needle, "Debian %u.%u.%u", &major, &minor, &patch))
+  if (needle != NULL) {
+    if (3 == sscanf(needle, "Debian %u.%u.%u", &major, &minor, &patch)) {
       goto calculate_version;
+    }
+  }
 
-  if (3 != sscanf(u.release, "%u.%u.%u", &major, &minor, &patch))
+  if (3 != sscanf(u.release, "%u.%u.%u", &major, &minor, &patch)) {
     return 0;
+  }
 
   /* Handle it when the process runs under the UNAME26 personality:
    *
@@ -373,8 +374,7 @@ calculate_version:
 }
 
 
-ssize_t
-uv__fs_copy_file_range(int fd_in,
+ssize_t uv__fs_copy_file_range(int fd_in,
                        off_t* off_in,
                        int fd_out,
                        off_t* off_out,
@@ -421,8 +421,9 @@ ssize_t uv__getrandom(void* buf, size_t buflen, unsigned flags) {
   ssize_t rc;
 
   rc = syscall(__NR_getrandom, buf, buflen, flags);
-  if (rc >= 0)
+  if (rc >= 0) {
     uv__msan_unpoison(buf, buflen);
+  }
 
   return rc;
 #endif
@@ -434,10 +435,7 @@ int uv__io_uring_setup(int entries, struct uv__io_uring_params* params) {
 }
 
 
-int uv__io_uring_enter(int fd,
-                       unsigned to_submit,
-                       unsigned min_complete,
-                       unsigned flags) {
+int uv__io_uring_enter(int fd, unsigned to_submit, unsigned min_complete, unsigned flags) {
   /* io_uring_enter used to take a sigset_t but it's unused
    * in newer kernels unless IORING_ENTER_EXT_ARG is set,
    * in which case it takes a struct io_uring_getevents_arg.
@@ -488,8 +486,9 @@ static int uv__use_io_uring(void) {
 
     /* But users can still enable it if they so desire. */
     val = getenv("UV_USE_IO_URING");
-    if (val != NULL)
+    if (val != NULL) {
       use = atoi(val) ? 1 : -1;
+    }
 
     atomic_store_explicit(&use_io_uring, use, memory_order_relaxed);
   }
@@ -499,10 +498,7 @@ static int uv__use_io_uring(void) {
 }
 
 
-static void uv__iou_init(int epollfd,
-                         struct uv__iou* iou,
-                         uint32_t entries,
-                         uint32_t flags) {
+static void uv__iou_init(int epollfd, struct uv__iou* iou, uint32_t entries, uint32_t flags) {
   struct uv__io_uring_params params;
   struct epoll_event e;
   size_t cqlen;
@@ -517,8 +513,9 @@ static void uv__iou_init(int epollfd,
   sq = MAP_FAILED;
   sqe = MAP_FAILED;
 
-  if (!uv__use_io_uring())
+  if (!uv__use_io_uring()) {
     return;
+  }
 
   /* SQPOLL required CAP_SYS_NICE until linux v5.12 relaxed that requirement.
    * Mostly academic because we check for a v5.13 kernel afterwards anyway.
@@ -526,31 +523,35 @@ static void uv__iou_init(int epollfd,
   memset(&params, 0, sizeof(params));
   params.flags = flags;
 
-  if (flags & UV__IORING_SETUP_SQPOLL)
+  if (flags & UV__IORING_SETUP_SQPOLL) {
     params.sq_thread_idle = 10;  /* milliseconds */
+  }
 
   /* Kernel returns a file descriptor with O_CLOEXEC flag set. */
   ringfd = uv__io_uring_setup(entries, &params);
-  if (ringfd == -1)
+  if (ringfd == -1) {
     return;
+  }
 
   /* IORING_FEAT_RSRC_TAGS is used to detect linux v5.13 but what we're
    * actually detecting is whether IORING_OP_STATX works with SQPOLL.
    */
-  if (!(params.features & UV__IORING_FEAT_RSRC_TAGS))
+  if (!(params.features & UV__IORING_FEAT_RSRC_TAGS)) {
     goto fail;
+  }
 
   /* Implied by IORING_FEAT_RSRC_TAGS but checked explicitly anyway. */
-  if (!(params.features & UV__IORING_FEAT_SINGLE_MMAP))
+  if (!(params.features & UV__IORING_FEAT_SINGLE_MMAP)) {
     goto fail;
+  }
 
   /* Implied by IORING_FEAT_RSRC_TAGS but checked explicitly anyway. */
-  if (!(params.features & UV__IORING_FEAT_NODROP))
+  if (!(params.features & UV__IORING_FEAT_NODROP)) {
     goto fail;
+  }
 
   sqlen = params.sq_off.array + params.sq_entries * sizeof(uint32_t);
-  cqlen =
-      params.cq_off.cqes + params.cq_entries * sizeof(struct uv__io_uring_cqe);
+  cqlen = params.cq_off.cqes + params.cq_entries * sizeof(struct uv__io_uring_cqe);
   maxlen = sqlen < cqlen ? cqlen : sqlen;
   sqelen = params.sq_entries * sizeof(struct uv__io_uring_sqe);
 
@@ -568,8 +569,9 @@ static void uv__iou_init(int epollfd,
              ringfd,
              0x10000000ull);  /* IORING_OFF_SQES */
 
-  if (sq == MAP_FAILED || sqe == MAP_FAILED)
+  if (sq == MAP_FAILED || sqe == MAP_FAILED) {
     goto fail;
+  }
 
   if (flags & UV__IORING_SETUP_SQPOLL) {
     /* Only interested in completion events. To get notified when
@@ -579,8 +581,9 @@ static void uv__iou_init(int epollfd,
     e.events = POLLIN;
     e.data.fd = ringfd;
 
-    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ringfd, &e))
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, ringfd, &e)) {
       goto fail;
+    }
   }
 
   iou->sqhead = (uint32_t*) (sq + params.sq_off.head);
@@ -602,20 +605,24 @@ static void uv__iou_init(int epollfd,
   iou->in_flight = 0;
   iou->flags = 0;
 
-  if (uv__kernel_version() >= /* 5.15.0 */ 0x050F00)
+  if (uv__kernel_version() >= /* 5.15.0 */ 0x050F00) {
     iou->flags |= UV__MKDIRAT_SYMLINKAT_LINKAT;
+  }
 
-  for (i = 0; i <= iou->sqmask; i++)
+  for (i = 0; i <= iou->sqmask; i++) {
     iou->sqarray[i] = i;  /* Slot -> sqe identity mapping. */
+  }
 
   return;
 
 fail:
-  if (sq != MAP_FAILED)
+  if (sq != MAP_FAILED) {
     munmap(sq, maxlen);
+  }
 
-  if (sqe != MAP_FAILED)
+  if (sqe != MAP_FAILED) {
     munmap(sqe, sqelen);
+  }
 
   uv__close(ringfd);
 }
@@ -642,8 +649,9 @@ int uv__platform_loop_init(uv_loop_t* loop) {
   loop->inotify_fd = -1;
   loop->backend_fd = epoll_create1(O_CLOEXEC);
 
-  if (loop->backend_fd == -1)
+  if (loop->backend_fd == -1) {
     return UV__ERR(errno);
+  }
 
   uv__iou_init(loop->backend_fd, &lfields->ctl, 256, 0);
 
@@ -664,8 +672,9 @@ int uv__io_fork(uv_loop_t* loop) {
   uv__platform_loop_delete(loop);
 
   err = uv__platform_loop_init(loop);
-  if (err)
+  if (err) {
     return err;
+  }
 
   return uv__inotify_fork(loop, root);
 }
@@ -703,10 +712,13 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
   inv = lfields->inv;
 
   /* Invalidate events with same file descriptor */
-  if (inv != NULL)
-    for (i = 0; i < inv->nfds; i++)
-      if (inv->events[i].data.fd == fd)
+  if (inv != NULL) {
+    for (i = 0; i < inv->nfds; i++) {
+      if (inv->events[i].data.fd == fd) {
         inv->events[i].data.fd = -1;
+      }
+    }
+  }
 
   /* Remove the file descriptor from the epoll.
    * This avoids a problem where the same file description remains open
@@ -735,22 +747,24 @@ int uv__io_check_fd(uv_loop_t* loop, int fd) {
   e.data.fd = -1;
 
   rc = 0;
-  if (epoll_ctl(loop->backend_fd, EPOLL_CTL_ADD, fd, &e))
-    if (errno != EEXIST)
+  if (epoll_ctl(loop->backend_fd, EPOLL_CTL_ADD, fd, &e)) {
+    if (errno != EEXIST) {
       rc = UV__ERR(errno);
+    }
+  }
 
-  if (rc == 0)
-    if (epoll_ctl(loop->backend_fd, EPOLL_CTL_DEL, fd, &e))
+  if (rc == 0) {
+    if (epoll_ctl(loop->backend_fd, EPOLL_CTL_DEL, fd, &e)) {
       abort();
+    }
+  }
 
   return rc;
 }
 
 
 /* Caller must initialize SQE and call uv__iou_submit(). */
-static struct uv__io_uring_sqe* uv__iou_get_sqe(struct uv__iou* iou,
-                                                uv_loop_t* loop,
-                                                uv_fs_t* req) {
+static struct uv__io_uring_sqe* uv__iou_get_sqe(struct uv__iou* iou, uv_loop_t* loop, uv_fs_t* req) {
   struct uv__io_uring_sqe* sqe;
   uint32_t head;
   uint32_t tail;
@@ -762,20 +776,22 @@ static struct uv__io_uring_sqe* uv__iou_get_sqe(struct uv__iou* iou,
    */
   if (iou->ringfd == -2) {
     uv__iou_init(loop->backend_fd, iou, 64, UV__IORING_SETUP_SQPOLL);
-    if (iou->ringfd == -2)
+    if (iou->ringfd == -2) {
       iou->ringfd = -1;  /* "failed" */
+    }
   }
 
-  if (iou->ringfd == -1)
+  if (iou->ringfd == -1) {
     return NULL;
+  }
 
-  head = atomic_load_explicit((_Atomic uint32_t*) iou->sqhead,
-                              memory_order_acquire);
+  head = atomic_load_explicit((_Atomic uint32_t*) iou->sqhead, memory_order_acquire);
   tail = *iou->sqtail;
   mask = iou->sqmask;
 
-  if ((head & mask) == ((tail + 1) & mask))
+  if ((head & mask) == ((tail + 1) & mask)) {
     return NULL;  /* No room in ring buffer. TODO(bnoordhuis) maybe flush it? */
+  }
 
   slot = tail & mask;
   sqe = iou->sqe;
@@ -799,17 +815,17 @@ static struct uv__io_uring_sqe* uv__iou_get_sqe(struct uv__iou* iou,
 static void uv__iou_submit(struct uv__iou* iou) {
   uint32_t flags;
 
-  atomic_store_explicit((_Atomic uint32_t*) iou->sqtail,
-                        *iou->sqtail + 1,
-                        memory_order_release);
+  atomic_store_explicit((_Atomic uint32_t*) iou->sqtail, *iou->sqtail + 1, memory_order_release);
 
-  flags = atomic_load_explicit((_Atomic uint32_t*) iou->sqflags,
-                               memory_order_acquire);
+  flags = atomic_load_explicit((_Atomic uint32_t*) iou->sqflags, memory_order_acquire);
 
-  if (flags & UV__IORING_SQ_NEED_WAKEUP)
-    if (uv__io_uring_enter(iou->ringfd, 0, 0, UV__IORING_ENTER_SQ_WAKEUP))
-      if (errno != EOWNERDEAD)  /* Kernel bug. Harmless, ignore. */
+  if (flags & UV__IORING_SQ_NEED_WAKEUP) {
+    if (uv__io_uring_enter(iou->ringfd, 0, 0, UV__IORING_ENTER_SQ_WAKEUP)) {
+      if (errno != EOWNERDEAD) { /* Kernel bug. Harmless, ignore. */
         perror("libuv: io_uring_enter(wakeup)");  /* Can't happen. */
+      }
+    }
+  }
 }
 
 
@@ -830,18 +846,21 @@ int uv__iou_fs_close(uv_loop_t* loop, uv_fs_t* req) {
    * 6.1.0 (longterm). Starting with longterm 6.1.x, the issue seems to be
    * solved.
    */
-  if (kv < /* 5.15.90 */ 0x050F5A)
+  if (kv < /* 5.15.90 */ 0x050F5A) {
     return 0;
+  }
 
-  if (kv >= /* 5.16.0 */ 0x050A00 && kv < /* 6.1.0 */ 0x060100)
+  if (kv >= /* 5.16.0 */ 0x050A00 && kv < /* 6.1.0 */ 0x060100) {
     return 0;
+  }
 
 
   iou = &uv__get_internal_fields(loop)->iou;
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->fd = req->file;
   sqe->opcode = UV__IORING_OP_CLOSE;
@@ -852,17 +871,16 @@ int uv__iou_fs_close(uv_loop_t* loop, uv_fs_t* req) {
 }
 
 
-int uv__iou_fs_fsync_or_fdatasync(uv_loop_t* loop,
-                                  uv_fs_t* req,
-                                  uint32_t fsync_flags) {
+int uv__iou_fs_fsync_or_fdatasync(uv_loop_t* loop, uv_fs_t* req, uint32_t fsync_flags) {
   struct uv__io_uring_sqe* sqe;
   struct uv__iou* iou;
 
   iou = &uv__get_internal_fields(loop)->iou;
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   /* Little known fact: setting seq->off and seq->len turns
    * it into an asynchronous sync_file_range() operation.
@@ -883,12 +901,14 @@ int uv__iou_fs_link(uv_loop_t* loop, uv_fs_t* req) {
 
   iou = &uv__get_internal_fields(loop)->iou;
 
-  if (!(iou->flags & UV__MKDIRAT_SYMLINKAT_LINKAT))
+  if (!(iou->flags & UV__MKDIRAT_SYMLINKAT_LINKAT)) {
     return 0;
+  }
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->path;
   sqe->fd = AT_FDCWD;
@@ -908,12 +928,14 @@ int uv__iou_fs_mkdir(uv_loop_t* loop, uv_fs_t* req) {
 
   iou = &uv__get_internal_fields(loop)->iou;
 
-  if (!(iou->flags & UV__MKDIRAT_SYMLINKAT_LINKAT))
+  if (!(iou->flags & UV__MKDIRAT_SYMLINKAT_LINKAT)) {
     return 0;
+  }
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->path;
   sqe->fd = AT_FDCWD;
@@ -933,8 +955,9 @@ int uv__iou_fs_open(uv_loop_t* loop, uv_fs_t* req) {
   iou = &uv__get_internal_fields(loop)->iou;
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->path;
   sqe->fd = AT_FDCWD;
@@ -955,8 +978,9 @@ int uv__iou_fs_rename(uv_loop_t* loop, uv_fs_t* req) {
   iou = &uv__get_internal_fields(loop)->iou;
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->path;
   sqe->fd = AT_FDCWD;
@@ -976,12 +1000,14 @@ int uv__iou_fs_symlink(uv_loop_t* loop, uv_fs_t* req) {
 
   iou = &uv__get_internal_fields(loop)->iou;
 
-  if (!(iou->flags & UV__MKDIRAT_SYMLINKAT_LINKAT))
+  if (!(iou->flags & UV__MKDIRAT_SYMLINKAT_LINKAT)) {
     return 0;
+  }
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->path;
   sqe->fd = AT_FDCWD;
@@ -1001,8 +1027,9 @@ int uv__iou_fs_unlink(uv_loop_t* loop, uv_fs_t* req) {
   iou = &uv__get_internal_fields(loop)->iou;
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->path;
   sqe->fd = AT_FDCWD;
@@ -1014,26 +1041,26 @@ int uv__iou_fs_unlink(uv_loop_t* loop, uv_fs_t* req) {
 }
 
 
-int uv__iou_fs_read_or_write(uv_loop_t* loop,
-                             uv_fs_t* req,
-                             int is_read) {
+int uv__iou_fs_read_or_write(uv_loop_t* loop, uv_fs_t* req, int is_read) {
   struct uv__io_uring_sqe* sqe;
   struct uv__iou* iou;
 
   /* If iovcnt is greater than IOV_MAX, cap it to IOV_MAX on reads and fallback
    * to the threadpool on writes */
   if (req->nbufs > IOV_MAX) {
-    if (is_read)
+    if (is_read) {
       req->nbufs = IOV_MAX;
-    else
+    } else {
       return 0;
+    }
   }
 
   iou = &uv__get_internal_fields(loop)->iou;
 
   sqe = uv__iou_get_sqe(iou, loop, req);
-  if (sqe == NULL)
+  if (sqe == NULL) {
     return 0;
+  }
 
   sqe->addr = (uintptr_t) req->bufs;
   sqe->fd = req->file;
@@ -1047,17 +1074,15 @@ int uv__iou_fs_read_or_write(uv_loop_t* loop,
 }
 
 
-int uv__iou_fs_statx(uv_loop_t* loop,
-                     uv_fs_t* req,
-                     int is_fstat,
-                     int is_lstat) {
+int uv__iou_fs_statx(uv_loop_t* loop, uv_fs_t* req, int is_fstat, int is_lstat) {
   struct uv__io_uring_sqe* sqe;
   struct uv__statx* statxbuf;
   struct uv__iou* iou;
 
   statxbuf = uv__malloc(sizeof(*statxbuf));
-  if (statxbuf == NULL)
+  if (statxbuf == NULL) {
     return 0;
+  }
 
   iou = &uv__get_internal_fields(loop)->iou;
 
@@ -1081,8 +1106,9 @@ int uv__iou_fs_statx(uv_loop_t* loop,
     sqe->statx_flags |= 0x1000; /* AT_EMPTY_PATH */
   }
 
-  if (is_lstat)
+  if (is_lstat) {
     sqe->statx_flags |= AT_SYMLINK_NOFOLLOW;
+  }
 
   uv__iou_submit(iou);
 
@@ -1145,8 +1171,7 @@ static void uv__poll_io_uring(uv_loop_t* loop, struct uv__iou* iou) {
   int rc;
 
   head = *iou->cqhead;
-  tail = atomic_load_explicit((_Atomic uint32_t*) iou->cqtail,
-                              memory_order_acquire);
+  tail = atomic_load_explicit((_Atomic uint32_t*) iou->cqtail, memory_order_acquire);
   mask = iou->cqmask;
   cqe = iou->cqe;
   nevents = 0;
@@ -1184,28 +1209,27 @@ static void uv__poll_io_uring(uv_loop_t* loop, struct uv__iou* iou) {
     nevents++;
   }
 
-  atomic_store_explicit((_Atomic uint32_t*) iou->cqhead,
-                        tail,
-                        memory_order_release);
+  atomic_store_explicit((_Atomic uint32_t*) iou->cqhead, tail, memory_order_release);
 
   /* Check whether CQE's overflowed, if so enter the kernel to make them
    * available. Don't grab them immediately but in the next loop iteration to
    * avoid loop starvation. */
-  flags = atomic_load_explicit((_Atomic uint32_t*) iou->sqflags,
-                               memory_order_acquire);
+  flags = atomic_load_explicit((_Atomic uint32_t*) iou->sqflags, memory_order_acquire);
 
   if (flags & UV__IORING_SQ_CQ_OVERFLOW) {
-    do
+    do {
       rc = uv__io_uring_enter(iou->ringfd, 0, 0, UV__IORING_ENTER_GETEVENTS);
-    while (rc == -1 && errno == EINTR);
+    } while (rc == -1 && errno == EINTR);
 
-    if (rc < 0)
+    if (rc < 0) {
       perror("libuv: io_uring_enter(getevents)");  /* Can't happen. */
+    }
   }
 
   uv__metrics_inc_events(loop, nevents);
-  if (uv__get_internal_fields(loop)->current_timeout == 0)
+  if (uv__get_internal_fields(loop)->current_timeout == 0) {
     uv__metrics_inc_events_waiting(loop, nevents);
+  }
 }
 
 
@@ -1244,14 +1268,13 @@ static void uv__epoll_ctl_prep(int epollfd,
   sqe->opcode = UV__IORING_OP_EPOLL_CTL;
   sqe->user_data = op | slot << 2 | (int64_t) fd << 32;
 
-  if ((*ctl->sqhead & mask) == (*ctl->sqtail & mask))
+  if ((*ctl->sqhead & mask) == (*ctl->sqtail & mask)) {
     uv__epoll_ctl_flush(epollfd, ctl, events);
+  }
 }
 
 
-static void uv__epoll_ctl_flush(int epollfd,
-                                struct uv__iou* ctl,
-                                struct epoll_event (*events)[256]) {
+static void uv__epoll_ctl_flush(int epollfd, struct uv__iou* ctl, struct epoll_event (*events)[256]) {
   struct epoll_event oldevents[256];
   struct uv__io_uring_cqe* cqe;
   uint32_t oldslot;
@@ -1266,15 +1289,17 @@ static void uv__epoll_ctl_flush(int epollfd,
   assert(*ctl->sqhead != *ctl->sqtail);
 
   n = *ctl->sqtail - *ctl->sqhead;
-  do
+  do {
     rc = uv__io_uring_enter(ctl->ringfd, n, n, UV__IORING_ENTER_GETEVENTS);
-  while (rc == -1 && errno == EINTR);
+  } while (rc == -1 && errno == EINTR);
 
-  if (rc < 0)
+  if (rc < 0) {
     perror("libuv: io_uring_enter(getevents)");  /* Can't happen. */
+  }
 
-  if (rc != (int) n)
+  if (rc != (int) n) {
     abort();
+  }
 
   assert(*ctl->sqhead == *ctl->sqtail);
 
@@ -1291,21 +1316,25 @@ static void uv__epoll_ctl_flush(int epollfd,
     cqe = ctl->cqe;
     cqe = &cqe[slot];
 
-    if (cqe->res == 0)
+    if (cqe->res == 0) {
       continue;
+    }
 
     fd = cqe->user_data >> 32;
     op = 3 & cqe->user_data;
     oldslot = 255 & (cqe->user_data >> 2);
 
-    if (op == EPOLL_CTL_DEL)
+    if (op == EPOLL_CTL_DEL) {
       continue;
+    }
 
-    if (op != EPOLL_CTL_ADD)
+    if (op != EPOLL_CTL_ADD) {
       abort();
+    }
 
-    if (cqe->res != -EEXIST)
+    if (cqe->res != -EEXIST) {
       abort();
+    }
 
     uv__epoll_ctl_prep(epollfd,
                        ctl,
@@ -1393,15 +1422,17 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       continue;
     }
 
-    if (!epoll_ctl(epollfd, op, fd, &e))
+    if (!epoll_ctl(epollfd, op, fd, &e)) {
       continue;
+    }
 
     assert(op == EPOLL_CTL_ADD);
     assert(errno == EEXIST);
 
     /* File descriptor that's been watched before, update event mask. */
-    if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &e))
+    if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &e)) {
       abort();
+    }
   }
 
   inv.events = events;
@@ -1409,22 +1440,27 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   inv.nfds = -1;
 
   for (;;) {
-    if (loop->nfds == 0)
-      if (iou->in_flight == 0)
+    if (loop->nfds == 0) {
+      if (iou->in_flight == 0) {
         break;
+      }
+    }
 
     /* All event mask mutations should be visible to the kernel before
      * we enter epoll_pwait().
      */
-    if (ctl->ringfd != -1)
-      while (*ctl->sqhead != *ctl->sqtail)
+    if (ctl->ringfd != -1) {
+      while (*ctl->sqhead != *ctl->sqtail) {
         uv__epoll_ctl_flush(epollfd, ctl, &prep);
+      }
+    }
 
     /* Only need to set the provider_entry_time if timeout != 0. The function
      * will return early if the loop isn't configured with UV_METRICS_IDLE_TIME.
      */
-    if (timeout != 0)
+    if (timeout != 0) {
       uv__metrics_set_provider_entry_time(loop);
+    }
 
     /* Store the current timeout in a location that's globally accessible so
      * other locations like uv__work_done() can determine whether the queue
@@ -1440,11 +1476,12 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
      */
     SAVE_ERRNO(uv__update_time(loop));
 
-    if (nfds == -1)
+    if (nfds == -1) {
       assert(errno == EINTR);
-    else if (nfds == 0)
+    } else if (nfds == 0) {
       /* Unlimited timeout should only return with events or signal. */
       assert(timeout != -1);
+    }
 
     if (nfds == 0 || nfds == -1) {
       if (reset_timeout != 0) {
@@ -1470,8 +1507,9 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       fd = pe->data.fd;
 
       /* Skip invalidated events, see uv__platform_invalidate_fd */
-      if (fd == -1)
+      if (fd == -1) {
         continue;
+      }
 
       if (fd == iou->ringfd) {
         uv__poll_io_uring(loop, iou);
@@ -1520,9 +1558,9 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
        * needs to remember the error/hangup event.  We should get that for
        * free when we switch over to edge-triggered I/O.
        */
-      if (pe->events == POLLERR || pe->events == POLLHUP)
-        pe->events |=
-          w->pevents & (POLLIN | POLLOUT | UV__POLLRDHUP | UV__POLLPRI);
+      if (pe->events == POLLERR || pe->events == POLLHUP) {
+        pe->events |= w->pevents & (POLLIN | POLLOUT | UV__POLLRDHUP | UV__POLLPRI);
+      }
 
       if (pe->events != 0) {
         /* Run signal watchers last.  This also affects child process watchers
@@ -1553,11 +1591,13 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
     lfields->inv = NULL;
 
-    if (have_iou_events != 0)
+    if (have_iou_events != 0) {
       break;  /* Event loop should cycle now so don't poll again. */
+    }
 
-    if (have_signals != 0)
+    if (have_signals != 0) {
       break;  /* Event loop should cycle now so don't poll again. */
+    }
 
     if (nevents != 0) {
       if (nfds == ARRAY_SIZE(events) && --count != 0) {
@@ -1569,24 +1609,29 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     }
 
 update_timeout:
-    if (timeout == 0)
+    if (timeout == 0) {
       break;
+    }
 
-    if (timeout == -1)
+    if (timeout == -1) {
       continue;
+    }
 
     assert(timeout > 0);
 
     real_timeout -= (loop->time - base);
-    if (real_timeout <= 0)
+    if (real_timeout <= 0) {
       break;
+    }
 
     timeout = real_timeout;
   }
 
-  if (ctl->ringfd != -1)
-    while (*ctl->sqhead != *ctl->sqtail)
+  if (ctl->ringfd != -1) {
+    while (*ctl->sqhead != *ctl->sqtail) {
       uv__epoll_ctl_flush(epollfd, ctl, &prep);
+    }
+  }
 }
 
 uint64_t uv__hrtime(uv_clocktype_t type) {
@@ -1603,24 +1648,29 @@ uint64_t uv__hrtime(uv_clocktype_t type) {
    * when it has microsecond granularity or better (unlikely).
    */
   clock_id = CLOCK_MONOTONIC;
-  if (type != UV_CLOCK_FAST)
+  if (type != UV_CLOCK_FAST) {
     goto done;
+  }
 
   clock_id = atomic_load_explicit(&fast_clock_id, memory_order_relaxed);
-  if (clock_id != -1)
+  if (clock_id != -1) {
     goto done;
+  }
 
   clock_id = CLOCK_MONOTONIC;
-  if (0 == clock_getres(CLOCK_MONOTONIC_COARSE, &t))
-    if (t.tv_nsec <= 1 * 1000 * 1000)
+  if (0 == clock_getres(CLOCK_MONOTONIC_COARSE, &t)) {
+    if (t.tv_nsec <= 1 * 1000 * 1000) {
       clock_id = CLOCK_MONOTONIC_COARSE;
+    }
+  }
 
   atomic_store_explicit(&fast_clock_id, clock_id, memory_order_relaxed);
 
 done:
 
-  if (clock_gettime(clock_id, &t))
+  if (clock_gettime(clock_id, &t)) {
     return 0;  /* Not really possible. */
+  }
 
   return t.tv_sec * (uint64_t) 1e9 + t.tv_nsec;
 }
@@ -1635,24 +1685,28 @@ int uv_resident_set_memory(size_t* rss) {
   
   /* rss: 24th element */
   rc = uv__slurp("/proc/self/stat", buf, sizeof(buf));
-  if (rc < 0)
+  if (rc < 0) {
     return rc;
+  }
     
   /* find the last ')' */
   s = strrchr(buf, ')');
-  if (s == NULL)
+  if (s == NULL) {
     goto err;
+  }
 
   for (i = 1; i <= 22; i++) {
     s = strchr(s + 1, ' ');
-    if (s == NULL)
+    if (s == NULL) {
       goto err;
+    }
   }
 
   errno = 0;
   val = strtol(s, NULL, 10);
-  if (val < 0 || errno != 0)
+  if (val < 0 || errno != 0) {
     goto err;
+  }
 
   *rss = val * getpagesize();
   return 0;
@@ -1669,12 +1723,15 @@ int uv_uptime(double* uptime) {
    * clock_gettime. Why not always clock_gettime? It doesn't always return the
    * right result under OpenVZ and possibly other containerized environments.
    */
-  if (0 == uv__slurp("/proc/uptime", buf, sizeof(buf)))
-    if (1 == sscanf(buf, "%lf", uptime))
+  if (0 == uv__slurp("/proc/uptime", buf, sizeof(buf))) {
+    if (1 == sscanf(buf, "%lf", uptime)) {
       return 0;
+    }
+  }
 
-  if (clock_gettime(CLOCK_BOOTTIME, &now))
+  if (clock_gettime(CLOCK_BOOTTIME, &now)) {
     return UV__ERR(errno);
+  }
 
   *uptime = now.tv_sec;
   return 0;
@@ -1747,8 +1804,9 @@ int uv_cpu_info(uv_cpu_info_t** ci, int* count) {
   maxcpu = 0;
 
   cpus = uv__calloc(ARRAY_SIZE(*cpus), sizeof(**cpus));
-  if (cpus == NULL)
+  if (cpus == NULL) {
     return UV_ENOMEM;
+  }
 
   fp = uv__open_file("/proc/stat");
   if (fp == NULL) {
@@ -1756,8 +1814,9 @@ int uv_cpu_info(uv_cpu_info_t** ci, int* count) {
     return UV__ERR(errno);
   }
 
-  if (NULL == fgets(buf, sizeof(buf), fp))
+  if (NULL == fgets(buf, sizeof(buf), fp)) {
     abort();
+  }
 
   for (;;) {
     memset(&t, 0, sizeof(t));
@@ -1765,39 +1824,47 @@ int uv_cpu_info(uv_cpu_info_t** ci, int* count) {
     n = fscanf(fp, "cpu%u %llu %llu %llu %llu %llu %llu",
                &cpu, &t.user, &t.nice, &t.sys, &t.idle, &skip, &t.irq);
 
-    if (n != 7)
+    if (n != 7) {
       break;
+    }
 
-    if (NULL == fgets(buf, sizeof(buf), fp))
+    if (NULL == fgets(buf, sizeof(buf), fp)) {
       abort();
+    }
 
-    if (cpu >= ARRAY_SIZE(*cpus))
+    if (cpu >= ARRAY_SIZE(*cpus)) {
       continue;
+    }
 
     (*cpus)[cpu] = t;
 
     bitmap[cpu >> 3] |= 1 << (cpu & 7);
 
-    if (cpu >= maxcpu)
+    if (cpu >= maxcpu) {
       maxcpu = cpu + 1;
+    }
   }
 
   fclose(fp);
 
   fp = uv__open_file("/proc/cpuinfo");
-  if (fp == NULL)
+  if (fp == NULL) {
     goto nocpuinfo;
+  }
 
   for (;;) {
-    if (1 != fscanf(fp, "processor\t: %u\n", &cpu))
+    if (1 != fscanf(fp, "processor\t: %u\n", &cpu)) {
       break;  /* Parse error. */
+    }
 
     found = 0;
-    while (!found && fgets(buf, sizeof(buf), fp))
+    while (!found && fgets(buf, sizeof(buf), fp)) {
       found = !strncmp(buf, model_marker, sizeof(model_marker) - 1);
+    }
 
-    if (!found)
+    if (!found) {
       goto next;
+    }
 
     p = buf + sizeof(model_marker) - 1;
     n = (int) strcspn(p, "\n");
@@ -1805,30 +1872,37 @@ int uv_cpu_info(uv_cpu_info_t** ci, int* count) {
     /* arm64: translate CPU part code to model name. */
     if (*parts) {
       p = memmem(parts, sizeof(parts) - 1, p, n + 1);
-      if (p == NULL)
+      if (p == NULL) {
         p = "unknown";
-      else
+      } else {
         p += n + 1;
+      }
       n = (int) strcspn(p, "\n");
     }
 
     found = 0;
-    for (model = models; !found && model < ARRAY_END(models); model++)
+    for (model = models; !found && model < ARRAY_END(models); model++) {
       found = !strncmp(p, *model, strlen(*model));
+    }
 
-    if (!found)
+    if (!found) {
       goto next;
+    }
 
-    if (**model == '\0')
+    if (**model == '\0') {
       snprintf(*model, sizeof(*model), "%.*s", n, p);
+    }
 
-    if (cpu < maxcpu)
+    if (cpu < maxcpu) {
       (*cpus)[cpu].model = model - models;
+    }
 
 next:
-    while (fgets(buf, sizeof(buf), fp))
-      if (*buf == '\n')
+    while (fgets(buf, sizeof(buf), fp)) {
+      if (*buf == '\n') {
         break;
+      }
+    }
   }
 
   fclose(fp);
@@ -1838,19 +1912,21 @@ nocpuinfo:
 
   n = 0;
   for (cpu = 0; cpu < maxcpu; cpu++) {
-    if (!(bitmap[cpu >> 3] & (1 << (cpu & 7))))
+    if (!(bitmap[cpu >> 3] & (1 << (cpu & 7)))) {
       continue;
+    }
 
     n++;
-    snprintf(buf, sizeof(buf),
-             "/sys/devices/system/cpu/cpu%u/cpufreq/scaling_cur_freq", cpu);
+    snprintf(buf, sizeof(buf), "/sys/devices/system/cpu/cpu%u/cpufreq/scaling_cur_freq", cpu);
 
     fp = uv__open_file(buf);
-    if (fp == NULL)
+    if (fp == NULL) {
       continue;
+    }
 
-    if (1 != fscanf(fp, "%llu", &(*cpus)[cpu].freq))
+    if (1 != fscanf(fp, "%llu", &(*cpus)[cpu].freq)) {
       abort();
+    }
     fclose(fp);
     fp = NULL;
   }
@@ -1869,8 +1945,9 @@ nocpuinfo:
 
   i = 0;
   for (cpu = 0; cpu < maxcpu; cpu++) {
-    if (!(bitmap[cpu >> 3] & (1 << (cpu & 7))))
+    if (!(bitmap[cpu >> 3] & (1 << (cpu & 7)))) {
       continue;
+    }
 
     c = *cpus + cpu;
 
@@ -1897,16 +1974,19 @@ nocpuinfo:
 
 
 static int uv__ifaddr_exclude(struct ifaddrs *ent, int exclude_type) {
-  if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)))
+  if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING))) {
     return 1;
-  if (ent->ifa_addr == NULL)
+  }
+  if (ent->ifa_addr == NULL) {
     return 1;
+  }
   /*
    * On Linux getifaddrs returns information related to the raw underlying
    * devices. We're not interested in this information yet.
    */
-  if (ent->ifa_addr->sa_family == PF_PACKET)
+  if (ent->ifa_addr->sa_family == PF_PACKET) {
     return exclude_type;
+  }
   return !exclude_type;
 }
 
@@ -1919,13 +1999,15 @@ int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
   *count = 0;
   *addresses = NULL;
 
-  if (getifaddrs(&addrs))
+  if (getifaddrs(&addrs)) {
     return UV__ERR(errno);
+  }
 
   /* Count the number of interfaces */
   for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (uv__ifaddr_exclude(ent, UV__EXCLUDE_IFADDR))
+    if (uv__ifaddr_exclude(ent, UV__EXCLUDE_IFADDR)) {
       continue;
+    }
 
     (*count)++;
   }
@@ -1945,8 +2027,9 @@ int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
   address = *addresses;
 
   for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (uv__ifaddr_exclude(ent, UV__EXCLUDE_IFADDR))
+    if (uv__ifaddr_exclude(ent, UV__EXCLUDE_IFADDR)) {
       continue;
+    }
 
     address->name = uv__strdup(ent->ifa_name);
 
@@ -1969,8 +2052,9 @@ int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
 
   /* Fill in physical addresses for each interface */
   for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (uv__ifaddr_exclude(ent, UV__EXCLUDE_IFPHYS))
+    if (uv__ifaddr_exclude(ent, UV__EXCLUDE_IFPHYS)) {
       continue;
+    }
 
     address = *addresses;
 
@@ -2016,13 +2100,15 @@ static uint64_t uv__read_proc_meminfo(const char* what) {
   char* p;
   char buf[4096];  /* Large enough to hold all of /proc/meminfo. */
 
-  if (uv__slurp("/proc/meminfo", buf, sizeof(buf)))
+  if (uv__slurp("/proc/meminfo", buf, sizeof(buf))) {
     return 0;
+  }
 
   p = strstr(buf, what);
 
-  if (p == NULL)
+  if (p == NULL) {
     return 0;
+  }
 
   p += strlen(what);
 
@@ -2039,11 +2125,13 @@ uint64_t uv_get_free_memory(void) {
 
   rc = uv__read_proc_meminfo("MemAvailable:");
 
-  if (rc != 0)
+  if (rc != 0) {
     return rc;
+  }
 
-  if (0 == sysinfo(&info))
+  if (0 == sysinfo(&info)) {
     return (uint64_t) info.freeram * info.mem_unit;
+  }
 
   return 0;
 }
@@ -2055,11 +2143,13 @@ uint64_t uv_get_total_memory(void) {
 
   rc = uv__read_proc_meminfo("MemTotal:");
 
-  if (rc != 0)
+  if (rc != 0) {
     return rc;
+  }
 
-  if (0 == sysinfo(&info))
+  if (0 == sysinfo(&info)) {
     return (uint64_t) info.totalram * info.mem_unit;
+  }
 
   return 0;
 }
@@ -2070,10 +2160,13 @@ static uint64_t uv__read_uint64(const char* filename) {
   uint64_t rc;
 
   rc = 0;
-  if (0 == uv__slurp(filename, buf, sizeof(buf)))
-    if (1 != sscanf(buf, "%" PRIu64, &rc))
-      if (0 == strcmp(buf, "max\n"))
+  if (0 == uv__slurp(filename, buf, sizeof(buf))) {
+    if (1 != sscanf(buf, "%" PRIu64, &rc)) {
+      if (0 == strcmp(buf, "max\n")) {
         rc = UINT64_MAX;
+      }
+    }
+  }
 
   return rc;
 }
@@ -2083,16 +2176,16 @@ static uint64_t uv__read_uint64(const char* filename) {
  * finds the location and length of the memory controller mount path.
  * This disregards the leading / for easy concatenation of paths.
  * Returns NULL if the memory controller wasn't found. */
-static char* uv__cgroup1_find_memory_controller(char buf[static 1024],
-                                                int* n) {
+static char* uv__cgroup1_find_memory_controller(char buf[static 1024], int* n) {
   char* p;
 
   /* Seek to the memory controller line. */
   p = strchr(buf, ':');
   while (p != NULL && strncmp(p, ":memory:", 8)) {
     p = strchr(p, '\n');
-    if (p != NULL)
+    if (p != NULL) {
       p = strchr(p, ':');
+    }
   }
 
   if (p != NULL) {
@@ -2104,8 +2197,7 @@ static char* uv__cgroup1_find_memory_controller(char buf[static 1024],
   return p;
 }
 
-static void uv__get_cgroup1_memory_limits(char buf[static 1024], uint64_t* high,
-                                          uint64_t* max) {
+static void uv__get_cgroup1_memory_limits(char buf[static 1024], uint64_t* high, uint64_t* max) {
   char filename[4097];
   char* p;
   int n;
@@ -2114,19 +2206,18 @@ static void uv__get_cgroup1_memory_limits(char buf[static 1024], uint64_t* high,
   /* Find out where the controller is mounted. */
   p = uv__cgroup1_find_memory_controller(buf, &n);
   if (p != NULL) {
-    snprintf(filename, sizeof(filename),
-             "/sys/fs/cgroup/memory/%.*s/memory.soft_limit_in_bytes", n, p);
+    snprintf(filename, sizeof(filename), "/sys/fs/cgroup/memory/%.*s/memory.soft_limit_in_bytes", n, p);
     *high = uv__read_uint64(filename);
 
-    snprintf(filename, sizeof(filename),
-             "/sys/fs/cgroup/memory/%.*s/memory.limit_in_bytes", n, p);
+    snprintf(filename, sizeof(filename), "/sys/fs/cgroup/memory/%.*s/memory.limit_in_bytes", n, p);
     *max = uv__read_uint64(filename);
 
     /* If the controller wasn't mounted, the reads above will have failed,
      * as indicated by uv__read_uint64 returning 0.
      */
-     if (*high != 0 && *max != 0)
+     if (*high != 0 && *max != 0) {
        goto update_limits;
+     }
   }
 
   /* Fall back to the limits of the global memory controller. */
@@ -2138,14 +2229,15 @@ static void uv__get_cgroup1_memory_limits(char buf[static 1024], uint64_t* high,
    */
 update_limits:
   cgroup1_max = LONG_MAX & ~(sysconf(_SC_PAGESIZE) - 1);
-  if (*high == cgroup1_max)
+  if (*high == cgroup1_max) {
     *high = UINT64_MAX;
-  if (*max == cgroup1_max)
+  }
+  if (*max == cgroup1_max) {
     *max = UINT64_MAX;
+  }
 }
 
-static void uv__get_cgroup2_memory_limits(char buf[static 1024], uint64_t* high,
-                                          uint64_t* max) {
+static void uv__get_cgroup2_memory_limits(char buf[static 1024], uint64_t* high, uint64_t* max) {
   char filename[4097];
   char* p;
   int n;
@@ -2166,13 +2258,15 @@ static uint64_t uv__get_cgroup_constrained_memory(char buf[static 1024]) {
   uint64_t max;
 
   /* In the case of cgroupv2, we'll only have a single entry. */
-  if (strncmp(buf, "0::/", 4))
+  if (strncmp(buf, "0::/", 4)) {
     uv__get_cgroup1_memory_limits(buf, &high, &max);
-  else
+  } else {
     uv__get_cgroup2_memory_limits(buf, &high, &max);
+  }
 
-  if (high == 0 || max == 0)
+  if (high == 0 || max == 0) {
     return 0;
+  }
 
   return high < max ? high : max;
 }
@@ -2180,8 +2274,9 @@ static uint64_t uv__get_cgroup_constrained_memory(char buf[static 1024]) {
 uint64_t uv_get_constrained_memory(void) {
   char buf[1024];
 
-  if (uv__slurp("/proc/self/cgroup", buf, sizeof(buf)))
+  if (uv__slurp("/proc/self/cgroup", buf, sizeof(buf))) {
     return 0;
+  }
 
   return uv__get_cgroup_constrained_memory(buf);
 }
@@ -2196,15 +2291,15 @@ static uint64_t uv__get_cgroup1_current_memory(char buf[static 1024]) {
   /* Find out where the controller is mounted. */
   p = uv__cgroup1_find_memory_controller(buf, &n);
   if (p != NULL) {
-    snprintf(filename, sizeof(filename),
-            "/sys/fs/cgroup/memory/%.*s/memory.usage_in_bytes", n, p);
+    snprintf(filename, sizeof(filename), "/sys/fs/cgroup/memory/%.*s/memory.usage_in_bytes", n, p);
     current = uv__read_uint64(filename);
 
     /* If the controller wasn't mounted, the reads above will have failed,
      * as indicated by uv__read_uint64 returning 0.
      */
-    if (current != 0)
+    if (current != 0) {
       return current;
+    }
   }
 
   /* Fall back to the usage of the global memory controller. */
@@ -2220,8 +2315,7 @@ static uint64_t uv__get_cgroup2_current_memory(char buf[static 1024]) {
   p = buf + strlen("0::/");
   n = (int) strcspn(p, "\n");
 
-  snprintf(filename, sizeof(filename),
-           "/sys/fs/cgroup/%.*s/memory.current", n, p);
+  snprintf(filename, sizeof(filename), "/sys/fs/cgroup/%.*s/memory.current", n, p);
   return uv__read_uint64(filename);
 }
 
@@ -2231,33 +2325,37 @@ uint64_t uv_get_available_memory(void) {
   uint64_t current;
   uint64_t total;
 
-  if (uv__slurp("/proc/self/cgroup", buf, sizeof(buf)))
+  if (uv__slurp("/proc/self/cgroup", buf, sizeof(buf))) {
     return 0;
+  }
 
   constrained = uv__get_cgroup_constrained_memory(buf);
-  if (constrained == 0)
+  if (constrained == 0) {
     return uv_get_free_memory();
+  }
 
   total = uv_get_total_memory();
-  if (constrained > total)
+  if (constrained > total) {
     return uv_get_free_memory();
+  }
 
   /* In the case of cgroupv2, we'll only have a single entry. */
-  if (strncmp(buf, "0::/", 4))
+  if (strncmp(buf, "0::/", 4)) {
     current = uv__get_cgroup1_current_memory(buf);
-  else
+  } else {
     current = uv__get_cgroup2_current_memory(buf);
+  }
 
   /* memory usage can be higher than the limit (for short bursts of time) */
-  if (constrained < current)
+  if (constrained < current) {
     return 0;
+  }
 
   return constrained - current;
 }
 
 
-static int uv__get_cgroupv2_constrained_cpu(const char* cgroup, 
-                                            uv__cpu_constraint* constraint) {
+static int uv__get_cgroupv2_constrained_cpu(const char* cgroup, uv__cpu_constraint* constraint) {
   char path[256];
   char buf[1024];
   unsigned int weight;
@@ -2265,47 +2363,50 @@ static int uv__get_cgroupv2_constrained_cpu(const char* cgroup,
   const char* cgroup_trimmed;
   char quota_buf[16];
 
-  if (strncmp(cgroup, "0::/", 4) != 0)
+  if (strncmp(cgroup, "0::/", 4) != 0) {
     return UV_EINVAL;
+  }
    
   /* Trim ending \n by replacing it with a 0 */
   cgroup_trimmed = cgroup + sizeof("0::/") - 1;      /* Skip the prefix "0::/" */
   cgroup_size = (int)strcspn(cgroup_trimmed, "\n");  /* Find the first slash */
 
   /* Construct the path to the cpu.max file */
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.max", cgroup_size,
-           cgroup_trimmed);
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.max", cgroup_size, cgroup_trimmed);
 
   /* Read cpu.max */
-  if (uv__slurp(path, buf, sizeof(buf)) < 0)
+  if (uv__slurp(path, buf, sizeof(buf)) < 0) {
     return UV_EIO;
+  }
 
-  if (sscanf(buf, "%15s %llu", quota_buf, &constraint->period_length) != 2)
+  if (sscanf(buf, "%15s %llu", quota_buf, &constraint->period_length) != 2) {
     return UV_EINVAL;
+  }
 
-  if (strncmp(quota_buf, "max", 3) == 0)
+  if (strncmp(quota_buf, "max", 3) == 0) {
     constraint->quota_per_period = LLONG_MAX;
-  else if (sscanf(quota_buf, "%lld", &constraint->quota_per_period) != 1)
+  } else if (sscanf(quota_buf, "%lld", &constraint->quota_per_period) != 1) {
     return UV_EINVAL; // conversion failed
+  }
 
   /* Construct the path to the cpu.weight file */
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.weight", cgroup_size,
-           cgroup_trimmed);
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.weight", cgroup_size, cgroup_trimmed);
 
   /* Read cpu.weight */
-  if (uv__slurp(path, buf, sizeof(buf)) < 0)
+  if (uv__slurp(path, buf, sizeof(buf)) < 0) {
     return UV_EIO;
+  }
 
-  if (sscanf(buf, "%u", &weight) != 1)
+  if (sscanf(buf, "%u", &weight) != 1) {
     return UV_EINVAL;
+  }
 
   constraint->proportions = (double)weight / 100.0;
 
   return 0;
 }
 
-static char* uv__cgroup1_find_cpu_controller(const char* cgroup,
-                                             int* cgroup_size) {
+static char* uv__cgroup1_find_cpu_controller(const char* cgroup, int* cgroup_size) {
   /* Seek to the cpu controller line. */
   char* cgroup_cpu = strstr(cgroup, ":cpu,");
 
@@ -2319,8 +2420,7 @@ static char* uv__cgroup1_find_cpu_controller(const char* cgroup,
   return cgroup_cpu;
 }
 
-static int uv__get_cgroupv1_constrained_cpu(const char* cgroup, 
-                                            uv__cpu_constraint* constraint) {
+static int uv__get_cgroupv1_constrained_cpu(const char* cgroup, uv__cpu_constraint* constraint) {
   char path[256];
   char buf[1024];
   unsigned int shares;
@@ -2329,40 +2429,44 @@ static int uv__get_cgroupv1_constrained_cpu(const char* cgroup,
 
   cgroup_cpu = uv__cgroup1_find_cpu_controller(cgroup, &cgroup_size);
 
-  if (cgroup_cpu == NULL)
+  if (cgroup_cpu == NULL) {
     return UV_EIO;
+  }
 
   /* Construct the path to the cpu.cfs_quota_us file */
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.cfs_quota_us",
-           cgroup_size, cgroup_cpu);
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.cfs_quota_us", cgroup_size, cgroup_cpu);
 
-  if (uv__slurp(path, buf, sizeof(buf)) < 0)
+  if (uv__slurp(path, buf, sizeof(buf)) < 0) {
     return UV_EIO;  
+  }
     
-  if (sscanf(buf, "%lld", &constraint->quota_per_period) != 1)
+  if (sscanf(buf, "%lld", &constraint->quota_per_period) != 1) {
     return UV_EINVAL;
+  }
 
   /* Construct the path to the cpu.cfs_period_us file */
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.cfs_period_us",
-           cgroup_size, cgroup_cpu);
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.cfs_period_us", cgroup_size, cgroup_cpu);
 
   /* Read cpu.cfs_period_us */
-  if (uv__slurp(path, buf, sizeof(buf)) < 0)
+  if (uv__slurp(path, buf, sizeof(buf)) < 0) {
     return UV_EIO;
+  }
 
-  if (sscanf(buf, "%lld", &constraint->period_length) != 1)
+  if (sscanf(buf, "%lld", &constraint->period_length) != 1) {
     return UV_EINVAL;
+  }
 
   /* Construct the path to the cpu.shares file */
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.shares", cgroup_size,
-           cgroup_cpu);
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/%.*s/cpu.shares", cgroup_size, cgroup_cpu);
 
   /* Read cpu.shares */
-  if (uv__slurp(path, buf, sizeof(buf)) < 0)
+  if (uv__slurp(path, buf, sizeof(buf)) < 0) {
     return UV_EIO;
+  }
   
-  if (sscanf(buf, "%u", &shares) != 1)
+  if (sscanf(buf, "%u", &shares) != 1) {
     return UV_EINVAL;
+  }
 
   constraint->proportions = (double)shares / 1024.0;
 
@@ -2373,16 +2477,18 @@ int uv__get_constrained_cpu(uv__cpu_constraint* constraint) {
   char cgroup[1024];
 
   /* Read the cgroup from /proc/self/cgroup */
-  if (uv__slurp("/proc/self/cgroup", cgroup, sizeof(cgroup)) < 0)
+  if (uv__slurp("/proc/self/cgroup", cgroup, sizeof(cgroup)) < 0) {
     return UV_EIO;
+  }
 
   /* Check if the system is using cgroup v2 by examining /proc/self/cgroup
    * The entry for cgroup v2 is always in the format "0::$PATH"
    * see https://docs.kernel.org/admin-guide/cgroup-v2.html */
-  if (strncmp(cgroup, "0::/", 4) == 0)
+  if (strncmp(cgroup, "0::/", 4) == 0) {
     return uv__get_cgroupv2_constrained_cpu(cgroup, constraint);
-  else
+  } else {
     return uv__get_cgroupv1_constrained_cpu(cgroup, constraint);
+  }
 }
 
 
@@ -2390,12 +2496,15 @@ void uv_loadavg(double avg[3]) {
   struct sysinfo info;
   char buf[128];  /* Large enough to hold all of /proc/loadavg. */
 
-  if (0 == uv__slurp("/proc/loadavg", buf, sizeof(buf)))
-    if (3 == sscanf(buf, "%lf %lf %lf", &avg[0], &avg[1], &avg[2]))
+  if (0 == uv__slurp("/proc/loadavg", buf, sizeof(buf))) {
+    if (3 == sscanf(buf, "%lf %lf %lf", &avg[0], &avg[1], &avg[2])) {
       return;
+    }
+  }
 
-  if (sysinfo(&info) < 0)
+  if (sysinfo(&info) < 0) {
     return;
+  }
 
   avg[0] = (double) info.loads[0] / 65536.0;
   avg[1] = (double) info.loads[1] / 65536.0;
@@ -2403,8 +2512,7 @@ void uv_loadavg(double avg[3]) {
 }
 
 
-static int compare_watchers(const struct watcher_list* a,
-                            const struct watcher_list* b) {
+static int compare_watchers(const struct watcher_list* a, const struct watcher_list* b) {
   if (a->wd < b->wd) return -1;
   if (a->wd > b->wd) return 1;
   return 0;
@@ -2414,12 +2522,14 @@ static int compare_watchers(const struct watcher_list* a,
 static int init_inotify(uv_loop_t* loop) {
   int fd;
 
-  if (loop->inotify_fd != -1)
+  if (loop->inotify_fd != -1) {
     return 0;
+  }
 
   fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-  if (fd < 0)
+  if (fd < 0) {
     return UV__ERR(errno);
+  }
 
   loop->inotify_fd = fd;
   uv__io_init(&loop->inotify_read_watcher, uv__inotify_read, loop->inotify_fd);
@@ -2440,8 +2550,9 @@ static int uv__inotify_fork(uv_loop_t* loop, struct watcher_list* root) {
   uv_fs_event_t* handle;
   char* tmp_path;
 
-  if (root == NULL)
+  if (root == NULL) {
     return 0;
+  }
 
   /* We must restore the old watcher list to be able to close items
    * out of it.
@@ -2454,8 +2565,7 @@ static int uv__inotify_fork(uv_loop_t* loop, struct watcher_list* root) {
    * uv__queue_move trick to safely iterate. Also don't free the watcher
    * list until we're done iterating. c.f. uv__inotify_read.
    */
-  RB_FOREACH_SAFE(watcher_list, watcher_root,
-                  uv__inotify_watchers(loop), tmp_watcher_list_iter) {
+  RB_FOREACH_SAFE(watcher_list, watcher_root, uv__inotify_watchers(loop), tmp_watcher_list_iter) {
     watcher_list->iterating = 1;
     uv__queue_move(&watcher_list->watchers, &queue);
     while (!uv__queue_empty(&queue)) {
@@ -2487,8 +2597,9 @@ static int uv__inotify_fork(uv_loop_t* loop, struct watcher_list* root) {
       handle->path = NULL;
       err = uv_fs_event_start(handle, handle->cb, tmp_path, 0);
       uv__free(tmp_path);
-      if (err)
+      if (err) {
         return err;
+      }
   }
 
   return 0;
@@ -2513,9 +2624,7 @@ static void maybe_free_watcher_list(struct watcher_list* w, uv_loop_t* loop) {
 }
 
 
-static void uv__inotify_read(uv_loop_t* loop,
-                             uv__io_t* dummy,
-                             unsigned int events) {
+static void uv__inotify_read(uv_loop_t* loop, uv__io_t* dummy, unsigned int events) {
   const struct inotify_event* e;
   struct watcher_list* w;
   uv_fs_event_t* h;
@@ -2528,9 +2637,9 @@ static void uv__inotify_read(uv_loop_t* loop,
   char buf[4096];
 
   for (;;) {
-    do
+    do {
       size = read(loop->inotify_fd, buf, sizeof(buf));
-    while (size == -1 && errno == EINTR);
+    } while (size == -1 && errno == EINTR);
 
     if (size == -1) {
       assert(errno == EAGAIN || errno == EWOULDBLOCK);
@@ -2544,14 +2653,17 @@ static void uv__inotify_read(uv_loop_t* loop,
       e = (const struct inotify_event*) p;
 
       events = 0;
-      if (e->mask & (IN_ATTRIB|IN_MODIFY))
+      if (e->mask & (IN_ATTRIB|IN_MODIFY)) {
         events |= UV_CHANGE;
-      if (e->mask & ~(IN_ATTRIB|IN_MODIFY))
+      }
+      if (e->mask & ~(IN_ATTRIB|IN_MODIFY)) {
         events |= UV_RENAME;
+      }
 
       w = find_watcher(loop, e->wd);
-      if (w == NULL)
+      if (w == NULL) {
         continue; /* Stale event, no watchers left. */
+      }
 
       /* inotify does not return the filename when monitoring a single file
        * for modifications. Repurpose the filename for API compatibility.
@@ -2595,10 +2707,7 @@ int uv_fs_event_init(uv_loop_t* loop, uv_fs_event_t* handle) {
 }
 
 
-int uv_fs_event_start(uv_fs_event_t* handle,
-                      uv_fs_event_cb cb,
-                      const char* path,
-                      unsigned int flags) {
+int uv_fs_event_start(uv_fs_event_t* handle, uv_fs_event_cb cb, const char* path, unsigned int flags) {
   struct watcher_list* w;
   uv_loop_t* loop;
   size_t len;
@@ -2606,14 +2715,16 @@ int uv_fs_event_start(uv_fs_event_t* handle,
   int err;
   int wd;
 
-  if (uv__is_active(handle))
+  if (uv__is_active(handle)) {
     return UV_EINVAL;
+  }
 
   loop = handle->loop;
 
   err = init_inotify(loop);
-  if (err)
+  if (err) {
     return err;
+  }
 
   events = IN_ATTRIB
          | IN_CREATE
@@ -2625,17 +2736,20 @@ int uv_fs_event_start(uv_fs_event_t* handle,
          | IN_MOVED_TO;
 
   wd = inotify_add_watch(loop->inotify_fd, path, events);
-  if (wd == -1)
+  if (wd == -1) {
     return UV__ERR(errno);
+  }
 
   w = find_watcher(loop, wd);
-  if (w)
+  if (w) {
     goto no_insert;
+  }
 
   len = strlen(path) + 1;
   w = uv__malloc(sizeof(*w) + len);
-  if (w == NULL)
+  if (w == NULL) {
     return UV_ENOMEM;
+  }
 
   w->wd = wd;
   w->path = memcpy(w + 1, path, len);
@@ -2657,8 +2771,9 @@ no_insert:
 int uv_fs_event_stop(uv_fs_event_t* handle) {
   struct watcher_list* w;
 
-  if (!uv__is_active(handle))
+  if (!uv__is_active(handle)) {
     return 0;
+  }
 
   w = find_watcher(handle->loop, handle->wd);
   assert(w != NULL);

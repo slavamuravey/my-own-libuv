@@ -35,12 +35,13 @@ static void uv__getnameinfo_work(struct uv__work* w) {
 
   req = container_of(w, uv_getnameinfo_t, work_req);
 
-  if (req->storage.ss_family == AF_INET)
+  if (req->storage.ss_family == AF_INET) {
     salen = sizeof(struct sockaddr_in);
-  else if (req->storage.ss_family == AF_INET6)
+  } else if (req->storage.ss_family == AF_INET6) {
     salen = sizeof(struct sockaddr_in6);
-  else
+  } else {
     abort();
+  }
 
   err = getnameinfo((struct sockaddr*) &req->storage,
                     salen,
@@ -69,8 +70,9 @@ static void uv__getnameinfo_done(struct uv__work* w, int status) {
     service = req->service;
   }
 
-  if (req->getnameinfo_cb)
+  if (req->getnameinfo_cb) {
     req->getnameinfo_cb(req, req->retcode, host, service);
+  }
 }
 
 /*
@@ -83,17 +85,14 @@ int uv_getnameinfo(uv_loop_t* loop,
                    uv_getnameinfo_cb getnameinfo_cb,
                    const struct sockaddr* addr,
                    int flags) {
-  if (req == NULL || addr == NULL)
+  if (req == NULL || addr == NULL) {
     return UV_EINVAL;
+  }
 
   if (addr->sa_family == AF_INET) {
-    memcpy(&req->storage,
-           addr,
-           sizeof(struct sockaddr_in));
+    memcpy(&req->storage, addr, sizeof(struct sockaddr_in));
   } else if (addr->sa_family == AF_INET6) {
-    memcpy(&req->storage,
-           addr,
-           sizeof(struct sockaddr_in6));
+    memcpy(&req->storage, addr, sizeof(struct sockaddr_in6));
   } else {
     return UV_EINVAL;
   }

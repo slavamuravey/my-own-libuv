@@ -112,14 +112,15 @@ static void uv__getaddrinfo_done(struct uv__work* w, int status) {
   uv__req_unregister(req->loop, req);
 
   /* See initialization in uv_getaddrinfo(). */
-  if (req->hints)
+  if (req->hints) {
     uv__free(req->hints);
-  else if (req->service)
+  } else if (req->service) {
     uv__free(req->service);
-  else if (req->hostname)
+  } else if (req->hostname) {
     uv__free(req->hostname);
-  else
+  } else {
     assert(0);
+  }
 
   req->hints = NULL;
   req->service = NULL;
@@ -130,8 +131,9 @@ static void uv__getaddrinfo_done(struct uv__work* w, int status) {
     req->retcode = UV_EAI_CANCELED;
   }
 
-  if (req->cb)
+  if (req->cb) {
     req->cb(req, req->retcode, req->addrinfo);
+  }
 }
 
 
@@ -149,15 +151,13 @@ int uv_getaddrinfo(uv_loop_t* loop,
   char* buf;
   long rc;
 
-  if (req == NULL || (hostname == NULL && service == NULL))
+  if (req == NULL || (hostname == NULL && service == NULL)) {
     return UV_EINVAL;
+  }
 
   /* FIXME(bnoordhuis) IDNA does not seem to work z/OS,
    * probably because it uses EBCDIC rather than ASCII.
    */
-#ifdef __MVS__
-  (void) &hostname_ascii;
-#else
   if (hostname != NULL) {
     rc = uv__idna_toascii(hostname,
                           hostname + strlen(hostname),
@@ -167,15 +167,15 @@ int uv_getaddrinfo(uv_loop_t* loop,
       return rc;
     hostname = hostname_ascii;
   }
-#endif
 
   hostname_len = hostname ? strlen(hostname) + 1 : 0;
   service_len = service ? strlen(service) + 1 : 0;
   hints_len = hints ? sizeof(*hints) : 0;
   buf = uv__malloc(hostname_len + service_len + hints_len);
 
-  if (buf == NULL)
+  if (buf == NULL) {
     return UV_ENOMEM;
+  }
 
   uv__req_init(loop, req, UV_GETADDRINFO);
   req->loop = loop;
@@ -199,8 +199,9 @@ int uv_getaddrinfo(uv_loop_t* loop,
     len += service_len;
   }
 
-  if (hostname)
+  if (hostname) {
     req->hostname = memcpy(buf + len, hostname, hostname_len);
+  }
 
   if (cb) {
     uv__work_submit(loop,
@@ -227,11 +228,13 @@ int uv_if_indextoname(unsigned int ifindex, char* buffer, size_t* size) {
   char ifname_buf[UV_IF_NAMESIZE];
   size_t len;
 
-  if (buffer == NULL || size == NULL || *size == 0)
+  if (buffer == NULL || size == NULL || *size == 0) {
     return UV_EINVAL;
+  }
 
-  if (if_indextoname(ifindex, ifname_buf) == NULL)
+  if (if_indextoname(ifindex, ifname_buf) == NULL) {
     return UV__ERR(errno);
+  }
 
   len = strnlen(ifname_buf, sizeof(ifname_buf));
 
