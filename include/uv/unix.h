@@ -43,7 +43,12 @@
 #include <pthread.h>
 #include <signal.h>
 
-#include "uv/threadpool.h"
+struct uv__work {
+  void (*work)(struct uv__work *w);
+  void (*done)(struct uv__work *w, int status);
+  struct uv_loop_s* loop;
+  struct uv__queue wq;
+};
 
 #define UV_PLATFORM_LOOP_FIELDS                                               \
   uv__io_t inotify_read_watcher;                                              \
@@ -69,9 +74,7 @@
 struct uv__io_s;
 struct uv_loop_s;
 
-typedef void (*uv__io_cb)(struct uv_loop_s* loop,
-                          struct uv__io_s* w,
-                          unsigned int events);
+typedef void (*uv__io_cb)(struct uv_loop_s* loop, struct uv__io_s* w, unsigned int events);
 typedef struct uv__io_s uv__io_t;
 
 struct uv__io_s {

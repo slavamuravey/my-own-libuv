@@ -11,6 +11,7 @@
         "socket.h": "c",
         "un.h": "c",
         "syscall.h": "c",
-        "sched.h": "c"
+        "sched.h": "c",
+        "libc-version.h": "c"
     }
 }

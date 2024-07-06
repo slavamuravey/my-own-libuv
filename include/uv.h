@@ -520,9 +520,7 @@ UV_EXTERN size_t uv_stream_get_write_queue_size(const uv_stream_t* stream);
 UV_EXTERN int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb);
 UV_EXTERN int uv_accept(uv_stream_t* server, uv_stream_t* client);
 
-UV_EXTERN int uv_read_start(uv_stream_t*,
-                            uv_alloc_cb alloc_cb,
-                            uv_read_cb read_cb);
+UV_EXTERN int uv_read_start(uv_stream_t*, uv_alloc_cb alloc_cb, uv_read_cb read_cb);
 UV_EXTERN int uv_read_stop(uv_stream_t*);
 
 UV_EXTERN int uv_write(uv_write_t* req,
@@ -577,9 +575,7 @@ UV_EXTERN int uv_tcp_init(uv_loop_t*, uv_tcp_t* handle);
 UV_EXTERN int uv_tcp_init_ex(uv_loop_t*, uv_tcp_t* handle, unsigned int flags);
 UV_EXTERN int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock);
 UV_EXTERN int uv_tcp_nodelay(uv_tcp_t* handle, int enable);
-UV_EXTERN int uv_tcp_keepalive(uv_tcp_t* handle,
-                               int enable,
-                               unsigned int delay);
+UV_EXTERN int uv_tcp_keepalive(uv_tcp_t* handle, int enable, unsigned int delay);
 UV_EXTERN int uv_tcp_simultaneous_accepts(uv_tcp_t* handle, int enable);
 
 enum uv_tcp_flags {
@@ -598,20 +594,11 @@ enum uv_tcp_flags {
   UV_TCP_REUSEPORT = 2,
 };
 
-UV_EXTERN int uv_tcp_bind(uv_tcp_t* handle,
-                          const struct sockaddr* addr,
-                          unsigned int flags);
-UV_EXTERN int uv_tcp_getsockname(const uv_tcp_t* handle,
-                                 struct sockaddr* name,
-                                 int* namelen);
-UV_EXTERN int uv_tcp_getpeername(const uv_tcp_t* handle,
-                                 struct sockaddr* name,
-                                 int* namelen);
+UV_EXTERN int uv_tcp_bind(uv_tcp_t* handle, const struct sockaddr* addr, unsigned int flags);
+UV_EXTERN int uv_tcp_getsockname(const uv_tcp_t* handle, struct sockaddr* name, int* namelen);
+UV_EXTERN int uv_tcp_getpeername(const uv_tcp_t* handle, struct sockaddr* name, int* namelen);
 UV_EXTERN int uv_tcp_close_reset(uv_tcp_t* handle, uv_close_cb close_cb);
-UV_EXTERN int uv_tcp_connect(uv_connect_t* req,
-                             uv_tcp_t* handle,
-                             const struct sockaddr* addr,
-                             uv_connect_cb cb);
+UV_EXTERN int uv_tcp_connect(uv_connect_t* req, uv_tcp_t* handle, const struct sockaddr* addr, uv_connect_cb cb);
 
 /* uv_connect_t is a subclass of uv_req_t. */
 struct uv_connect_s {
@@ -702,17 +689,11 @@ struct uv_udp_send_s {
 UV_EXTERN int uv_udp_init(uv_loop_t*, uv_udp_t* handle);
 UV_EXTERN int uv_udp_init_ex(uv_loop_t*, uv_udp_t* handle, unsigned int flags);
 UV_EXTERN int uv_udp_open(uv_udp_t* handle, uv_os_sock_t sock);
-UV_EXTERN int uv_udp_bind(uv_udp_t* handle,
-                          const struct sockaddr* addr,
-                          unsigned int flags);
+UV_EXTERN int uv_udp_bind(uv_udp_t* handle, const struct sockaddr* addr, unsigned int flags);
 UV_EXTERN int uv_udp_connect(uv_udp_t* handle, const struct sockaddr* addr);
 
-UV_EXTERN int uv_udp_getpeername(const uv_udp_t* handle,
-                                 struct sockaddr* name,
-                                 int* namelen);
-UV_EXTERN int uv_udp_getsockname(const uv_udp_t* handle,
-                                 struct sockaddr* name,
-                                 int* namelen);
+UV_EXTERN int uv_udp_getpeername(const uv_udp_t* handle, struct sockaddr* name, int* namelen);
+UV_EXTERN int uv_udp_getsockname(const uv_udp_t* handle, struct sockaddr* name, int* namelen);
 UV_EXTERN int uv_udp_set_membership(uv_udp_t* handle,
                                     const char* multicast_addr,
                                     const char* interface_addr,
@@ -724,8 +705,7 @@ UV_EXTERN int uv_udp_set_source_membership(uv_udp_t* handle,
                                            uv_membership membership);
 UV_EXTERN int uv_udp_set_multicast_loop(uv_udp_t* handle, int on);
 UV_EXTERN int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl);
-UV_EXTERN int uv_udp_set_multicast_interface(uv_udp_t* handle,
-                                             const char* interface_addr);
+UV_EXTERN int uv_udp_set_multicast_interface(uv_udp_t* handle, const char* interface_addr);
 UV_EXTERN int uv_udp_set_broadcast(uv_udp_t* handle, int on);
 UV_EXTERN int uv_udp_set_ttl(uv_udp_t* handle, int ttl);
 UV_EXTERN int uv_udp_send(uv_udp_send_t* req,
@@ -819,26 +799,16 @@ struct uv_pipe_s {
 UV_EXTERN int uv_pipe_init(uv_loop_t*, uv_pipe_t* handle, int ipc);
 UV_EXTERN int uv_pipe_open(uv_pipe_t*, uv_file file);
 UV_EXTERN int uv_pipe_bind(uv_pipe_t* handle, const char* name);
-UV_EXTERN int uv_pipe_bind2(uv_pipe_t* handle,
-                            const char* name,
-                            size_t namelen,
-                            unsigned int flags);
-UV_EXTERN void uv_pipe_connect(uv_connect_t* req,
-                               uv_pipe_t* handle,
-                               const char* name,
-                               uv_connect_cb cb);
+UV_EXTERN int uv_pipe_bind2(uv_pipe_t* handle, const char* name, size_t namelen, unsigned int flags);
+UV_EXTERN void uv_pipe_connect(uv_connect_t* req, uv_pipe_t* handle, const char* name, uv_connect_cb cb);
 UV_EXTERN int uv_pipe_connect2(uv_connect_t* req,
                                uv_pipe_t* handle,
                                const char* name,
                                size_t namelen,
                                unsigned int flags,
                                uv_connect_cb cb);
-UV_EXTERN int uv_pipe_getsockname(const uv_pipe_t* handle,
-                                  char* buffer,
-                                  size_t* size);
-UV_EXTERN int uv_pipe_getpeername(const uv_pipe_t* handle,
-                                  char* buffer,
-                                  size_t* size);
+UV_EXTERN int uv_pipe_getsockname(const uv_pipe_t* handle, char* buffer, size_t* size);
+UV_EXTERN int uv_pipe_getpeername(const uv_pipe_t* handle, char* buffer, size_t* size);
 UV_EXTERN void uv_pipe_pending_instances(uv_pipe_t* handle, int count);
 UV_EXTERN int uv_pipe_pending_count(uv_pipe_t* handle);
 UV_EXTERN uv_handle_type uv_pipe_pending_type(uv_pipe_t* handle);
@@ -859,9 +829,7 @@ enum uv_poll_event {
 };
 
 UV_EXTERN int uv_poll_init(uv_loop_t* loop, uv_poll_t* handle, int fd);
-UV_EXTERN int uv_poll_init_socket(uv_loop_t* loop,
-                                  uv_poll_t* handle,
-                                  uv_os_sock_t socket);
+UV_EXTERN int uv_poll_init_socket(uv_loop_t* loop, uv_poll_t* handle, uv_os_sock_t socket);
 UV_EXTERN int uv_poll_start(uv_poll_t* handle, int events, uv_poll_cb cb);
 UV_EXTERN int uv_poll_stop(uv_poll_t* handle);
 
@@ -901,9 +869,7 @@ struct uv_async_s {
   UV_ASYNC_PRIVATE_FIELDS
 };
 
-UV_EXTERN int uv_async_init(uv_loop_t*,
-                            uv_async_t* async,
-                            uv_async_cb async_cb);
+UV_EXTERN int uv_async_init(uv_loop_t*, uv_async_t* async, uv_async_cb async_cb);
 UV_EXTERN int uv_async_send(uv_async_t* async);
 
 
@@ -918,10 +884,7 @@ struct uv_timer_s {
 };
 
 UV_EXTERN int uv_timer_init(uv_loop_t*, uv_timer_t* handle);
-UV_EXTERN int uv_timer_start(uv_timer_t* handle,
-                             uv_timer_cb cb,
-                             uint64_t timeout,
-                             uint64_t repeat);
+UV_EXTERN int uv_timer_start(uv_timer_t* handle, uv_timer_cb cb, uint64_t timeout, uint64_t repeat);
 UV_EXTERN int uv_timer_stop(uv_timer_t* handle);
 UV_EXTERN int uv_timer_again(uv_timer_t* handle);
 UV_EXTERN void uv_timer_set_repeat(uv_timer_t* handle, uint64_t repeat);
@@ -1117,9 +1080,7 @@ struct uv_process_s {
   UV_PROCESS_PRIVATE_FIELDS
 };
 
-UV_EXTERN int uv_spawn(uv_loop_t* loop,
-                       uv_process_t* handle,
-                       const uv_process_options_t* options);
+UV_EXTERN int uv_spawn(uv_loop_t* loop, uv_process_t* handle, const uv_process_options_t* options);
 UV_EXTERN int uv_process_kill(uv_process_t*, int signum);
 UV_EXTERN int uv_kill(int pid, int signum);
 UV_EXTERN uv_pid_t uv_process_get_pid(const uv_process_t*);
@@ -1136,10 +1097,7 @@ struct uv_work_s {
   UV_WORK_PRIVATE_FIELDS
 };
 
-UV_EXTERN int uv_queue_work(uv_loop_t* loop,
-                            uv_work_t* req,
-                            uv_work_cb work_cb,
-                            uv_after_work_cb after_work_cb);
+UV_EXTERN int uv_queue_work(uv_loop_t* loop, uv_work_t* req, uv_work_cb work_cb, uv_after_work_cb after_work_cb);
 
 UV_EXTERN int uv_cancel(uv_req_t* req);
 
@@ -1288,10 +1246,8 @@ UV_EXTERN int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count);
 UV_EXTERN void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count);
 UV_EXTERN int uv_cpumask_size(void);
 
-UV_EXTERN int uv_interface_addresses(uv_interface_address_t** addresses,
-                                     int* count);
-UV_EXTERN void uv_free_interface_addresses(uv_interface_address_t* addresses,
-                                           int count);
+UV_EXTERN int uv_interface_addresses(uv_interface_address_t** addresses, int* count);
+UV_EXTERN void uv_free_interface_addresses(uv_interface_address_t* addresses, int count);
 
 struct uv_env_item_s {
   char* name;
@@ -1399,16 +1355,8 @@ UV_EXTERN const char* uv_fs_get_path(const uv_fs_t*);
 UV_EXTERN uv_stat_t* uv_fs_get_statbuf(uv_fs_t*);
 
 UV_EXTERN void uv_fs_req_cleanup(uv_fs_t* req);
-UV_EXTERN int uv_fs_close(uv_loop_t* loop,
-                          uv_fs_t* req,
-                          uv_file file,
-                          uv_fs_cb cb);
-UV_EXTERN int uv_fs_open(uv_loop_t* loop,
-                         uv_fs_t* req,
-                         const char* path,
-                         int flags,
-                         int mode,
-                         uv_fs_cb cb);
+UV_EXTERN int uv_fs_close(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb);
+UV_EXTERN int uv_fs_open(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags, int mode, uv_fs_cb cb);
 UV_EXTERN int uv_fs_read(uv_loop_t* loop,
                          uv_fs_t* req,
                          uv_file file,
@@ -1416,10 +1364,7 @@ UV_EXTERN int uv_fs_read(uv_loop_t* loop,
                          unsigned int nbufs,
                          int64_t offset,
                          uv_fs_cb cb);
-UV_EXTERN int uv_fs_unlink(uv_loop_t* loop,
-                           uv_fs_t* req,
-                           const char* path,
-                           uv_fs_cb cb);
+UV_EXTERN int uv_fs_unlink(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb);
 UV_EXTERN int uv_fs_write(uv_loop_t* loop,
                           uv_fs_t* req,
                           uv_file file,
@@ -1473,8 +1418,7 @@ UV_EXTERN int uv_fs_scandir(uv_loop_t* loop,
                             const char* path,
                             int flags,
                             uv_fs_cb cb);
-UV_EXTERN int uv_fs_scandir_next(uv_fs_t* req,
-                                 uv_dirent_t* ent);
+UV_EXTERN int uv_fs_scandir_next(uv_fs_t* req, uv_dirent_t* ent);
 UV_EXTERN int uv_fs_opendir(uv_loop_t* loop,
                             uv_fs_t* req,
                             const char* path,
@@ -1658,9 +1602,7 @@ UV_EXTERN int uv_signal_init(uv_loop_t* loop, uv_signal_t* handle);
 UV_EXTERN int uv_signal_start(uv_signal_t* handle,
                               uv_signal_cb signal_cb,
                               int signum);
-UV_EXTERN int uv_signal_start_oneshot(uv_signal_t* handle,
-                                      uv_signal_cb signal_cb,
-                                      int signum);
+UV_EXTERN int uv_signal_start_oneshot(uv_signal_t* handle, uv_signal_cb signal_cb, int signum);
 UV_EXTERN int uv_signal_stop(uv_signal_t* handle);
 
 UV_EXTERN void uv_loadavg(double avg[3]);
@@ -1703,9 +1645,7 @@ UV_EXTERN int uv_fs_event_start(uv_fs_event_t* handle,
                                 const char* path,
                                 unsigned int flags);
 UV_EXTERN int uv_fs_event_stop(uv_fs_event_t* handle);
-UV_EXTERN int uv_fs_event_getpath(uv_fs_event_t* handle,
-                                  char* buffer,
-                                  size_t* size);
+UV_EXTERN int uv_fs_event_getpath(uv_fs_event_t* handle, char* buffer, size_t* size);
 
 UV_EXTERN int uv_ip4_addr(const char* ip, int port, struct sockaddr_in* addr);
 UV_EXTERN int uv_ip6_addr(const char* ip, int port, struct sockaddr_in6* addr);
@@ -1745,12 +1685,8 @@ UV_EXTERN int uv_random(uv_loop_t* loop,
 # define UV_IF_NAMESIZE (16 + 1)
 #endif
 
-UV_EXTERN int uv_if_indextoname(unsigned int ifindex,
-                                char* buffer,
-                                size_t* size);
-UV_EXTERN int uv_if_indextoiid(unsigned int ifindex,
-                               char* buffer,
-                               size_t* size);
+UV_EXTERN int uv_if_indextoname(unsigned int ifindex, char* buffer, size_t* size);
+UV_EXTERN int uv_if_indextoiid(unsigned int ifindex, char* buffer, size_t* size);
 
 UV_EXTERN int uv_exepath(char* buffer, size_t* size);
 
@@ -1806,9 +1742,7 @@ UV_EXTERN void uv_barrier_destroy(uv_barrier_t* barrier);
 UV_EXTERN int uv_barrier_wait(uv_barrier_t* barrier);
 
 UV_EXTERN void uv_cond_wait(uv_cond_t* cond, uv_mutex_t* mutex);
-UV_EXTERN int uv_cond_timedwait(uv_cond_t* cond,
-                                uv_mutex_t* mutex,
-                                uint64_t timeout);
+UV_EXTERN int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout);
 
 UV_EXTERN void uv_once(uv_once_t* guard, void (*callback)(void));
 
@@ -1885,16 +1819,10 @@ UV_EXTERN void* uv_loop_get_data(const uv_loop_t*);
 UV_EXTERN void uv_loop_set_data(uv_loop_t*, void* data);
 
 /* String utilities needed internally for dealing with Windows. */
-size_t uv_utf16_length_as_wtf8(const uint16_t* utf16,
-                               ssize_t utf16_len);
-int uv_utf16_to_wtf8(const uint16_t* utf16,
-                     ssize_t utf16_len,
-                     char** wtf8_ptr,
-                     size_t* wtf8_len_ptr);
+size_t uv_utf16_length_as_wtf8(const uint16_t* utf16, ssize_t utf16_len);
+int uv_utf16_to_wtf8(const uint16_t* utf16, ssize_t utf16_len, char** wtf8_ptr, size_t* wtf8_len_ptr);
 ssize_t uv_wtf8_length_as_utf16(const char* wtf8);
-void uv_wtf8_to_utf16(const char* wtf8,
-                      uint16_t* utf16,
-                      size_t utf16_len);
+void uv_wtf8_to_utf16(const char* wtf8, uint16_t* utf16, size_t utf16_len);
 
 /* Don't export the private CPP symbols. */
 #undef UV_HANDLE_TYPE_PRIVATE
