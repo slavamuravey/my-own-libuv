@@ -21,14 +21,7 @@
 
 #include "uv.h"
 #include "uv-common.h"
-
-#ifdef _WIN32
-#include "win/internal.h"
-#include "win/handle-inl.h"
-#define uv__make_close_pending(h) uv__want_endgame((h)->loop, (h))
-#else
 #include "internal.h"
-#endif
 
 #include <assert.h>
 #include <stdlib.h>
@@ -63,24 +56,23 @@ int uv_fs_poll_init(uv_loop_t* loop, uv_fs_poll_t* handle) {
 }
 
 
-int uv_fs_poll_start(uv_fs_poll_t* handle,
-                     uv_fs_poll_cb cb,
-                     const char* path,
-                     unsigned int interval) {
+int uv_fs_poll_start(uv_fs_poll_t* handle, uv_fs_poll_cb cb, const char* path, unsigned int interval) {
   struct poll_ctx* ctx;
   uv_loop_t* loop;
   size_t len;
   int err;
 
-  if (uv_is_active((uv_handle_t*)handle))
+  if (uv_is_active((uv_handle_t*)handle)) {
     return 0;
+  }
 
   loop = handle->loop;
   len = strlen(path);
   ctx = uv__calloc(1, sizeof(*ctx) + len);
 
-  if (ctx == NULL)
+  if (ctx == NULL) {
     return UV_ENOMEM;
+  }
 
   ctx->loop = loop;
   ctx->poll_cb = cb;
@@ -90,18 +82,21 @@ int uv_fs_poll_start(uv_fs_poll_t* handle,
   memcpy(ctx->path, path, len + 1);
 
   err = uv_timer_init(loop, &ctx->timer_handle);
-  if (err < 0)
+  if (err < 0) {
     goto error;
+  }
 
   ctx->timer_handle.flags |= UV_HANDLE_INTERNAL;
   uv__handle_unref(&ctx->timer_handle);
 
   err = uv_fs_stat(loop, &ctx->fs_req, ctx->path, poll_cb);
-  if (err < 0)
+  if (err < 0) {
     goto error;
+  }
 
-  if (handle->poll_ctx != NULL)
+  if (handle->poll_ctx != NULL) {
     ctx->previous = handle->poll_ctx;
+  }
   handle->poll_ctx = ctx;
   uv__handle_start(handle);
 
@@ -116,8 +111,9 @@ error:
 int uv_fs_poll_stop(uv_fs_poll_t* handle) {
   struct poll_ctx* ctx;
 
-  if (!uv_is_active((uv_handle_t*)handle))
+  if (!uv_is_active((uv_handle_t*)handle)) {
     return 0;
+  }
 
   ctx = handle->poll_ctx;
   assert(ctx != NULL);
@@ -126,8 +122,9 @@ int uv_fs_poll_stop(uv_fs_poll_t* handle) {
   /* Close the timer if it's active. If it's inactive, there's a stat request
    * in progress and poll_cb will take care of the cleanup.
    */
-  if (uv_is_active((uv_handle_t*)&ctx->timer_handle))
+  if (uv_is_active((uv_handle_t*)&ctx->timer_handle)) {
     uv_close((uv_handle_t*)&ctx->timer_handle, timer_close_cb);
+  }
 
   uv__handle_stop(handle);
 
@@ -164,8 +161,9 @@ int uv_fs_poll_getpath(uv_fs_poll_t* handle, char* buffer, size_t* size) {
 void uv__fs_poll_close(uv_fs_poll_t* handle) {
   uv_fs_poll_stop(handle);
 
-  if (handle->poll_ctx == NULL)
+  if (handle->poll_ctx == NULL) {
     uv__make_close_pending((uv_handle_t*)handle);
+  }
 }
 
 
@@ -177,8 +175,9 @@ static void timer_cb(uv_timer_t* timer) {
   assert(ctx->parent_handle->poll_ctx == ctx);
   ctx->start_time = uv_now(ctx->loop);
 
-  if (uv_fs_stat(ctx->loop, &ctx->fs_req, ctx->path, poll_cb))
+  if (uv_fs_stat(ctx->loop, &ctx->fs_req, ctx->path, poll_cb)) {
     abort();
+  }
 }
 
 
@@ -191,15 +190,13 @@ static void poll_cb(uv_fs_t* req) {
   ctx = container_of(req, struct poll_ctx, fs_req);
   handle = ctx->parent_handle;
 
-  if (!uv_is_active((uv_handle_t*)handle) || uv__is_closing(handle))
+  if (!uv_is_active((uv_handle_t*)handle) || uv__is_closing(handle)) {
     goto out;
+  }
 
   if (req->result != 0) {
     if (ctx->busy_polling != req->result) {
-      ctx->poll_cb(ctx->parent_handle,
-                   req->result,
-                   &ctx->statbuf,
-                   &zero_statbuf);
+      ctx->poll_cb(ctx->parent_handle, req->result, &ctx->statbuf, &zero_statbuf);
       ctx->busy_polling = req->result;
     }
     goto out;
@@ -207,9 +204,11 @@ static void poll_cb(uv_fs_t* req) {
 
   statbuf = &req->statbuf;
 
-  if (ctx->busy_polling != 0)
-    if (ctx->busy_polling < 0 || !statbuf_eq(&ctx->statbuf, statbuf))
+  if (ctx->busy_polling != 0) {
+    if (ctx->busy_polling < 0 || !statbuf_eq(&ctx->statbuf, statbuf)) {
       ctx->poll_cb(ctx->parent_handle, 0, &ctx->statbuf, statbuf);
+    }
+  }
 
   ctx->statbuf = *statbuf;
   ctx->busy_polling = 1;
@@ -226,8 +225,9 @@ out:
   interval = ctx->interval;
   interval -= (uv_now(ctx->loop) - ctx->start_time) % interval;
 
-  if (uv_timer_start(&ctx->timer_handle, timer_cb, interval, 0))
+  if (uv_timer_start(&ctx->timer_handle, timer_cb, interval, 0)) {
     abort();
+  }
 }
 
 
@@ -241,8 +241,9 @@ static void timer_close_cb(uv_handle_t* timer) {
   handle = ctx->parent_handle;
   if (ctx == handle->poll_ctx) {
     handle->poll_ctx = ctx->previous;
-    if (handle->poll_ctx == NULL && uv__is_closing(handle))
+    if (handle->poll_ctx == NULL && uv__is_closing(handle)) {
       uv__make_close_pending((uv_handle_t*)handle);
+    }
   } else {
     for (last = handle->poll_ctx, it = last->previous;
          it != ctx;
@@ -271,17 +272,3 @@ static int statbuf_eq(const uv_stat_t* a, const uv_stat_t* b) {
       && a->st_flags == b->st_flags
       && a->st_gen == b->st_gen;
 }
-
-
-#if defined(_WIN32)
-
-#include "win/internal.h"
-#include "win/handle-inl.h"
-
-void uv__fs_poll_endgame(uv_loop_t* loop, uv_fs_poll_t* handle) {
-  assert(handle->flags & UV_HANDLE_CLOSING);
-  assert(!(handle->flags & UV_HANDLE_CLOSED));
-  uv__handle_close(handle);
-}
-
-#endif /* _WIN32 */
