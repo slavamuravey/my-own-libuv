@@ -9,6 +9,8 @@
         "if.h": "c",
         "type_traits": "c",
         "socket.h": "c",
-        "un.h": "c"
+        "un.h": "c",
+        "syscall.h": "c",
+        "sched.h": "c"
     }
 }

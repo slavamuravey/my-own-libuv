@@ -46,55 +46,14 @@
 #include <sys/time.h>
 #include <time.h> /* clock_gettime */
 
-#ifdef __sun
-# include <sys/filio.h>
-# include <sys/wait.h>
-#endif
-
-#if defined(__APPLE__)
-# include <sys/filio.h>
-# endif /* defined(__APPLE__) */
-
-
-#if defined(__APPLE__) && !TARGET_OS_IPHONE
-# include <crt_externs.h>
-# include <mach-o/dyld.h> /* _NSGetExecutablePath */
-# define environ (*_NSGetEnviron())
-#else /* defined(__APPLE__) && !TARGET_OS_IPHONE */
 extern char** environ;
-#endif /* !(defined(__APPLE__) && !TARGET_OS_IPHONE) */
 
+#include <sched.h>
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
+#define uv__accept4 accept4
 
-#if defined(__DragonFly__)      || \
-    defined(__FreeBSD__)        || \
-    defined(__NetBSD__)         || \
-    defined(__OpenBSD__)
-# include <sys/sysctl.h>
-# include <sys/filio.h>
-# include <sys/wait.h>
-# include <sys/param.h>
-# if defined(__FreeBSD__)
-#  include <sys/cpuset.h>
-#  define uv__accept4 accept4
-# endif
-# if defined(__NetBSD__)
-#  define uv__accept4(a, b, c, d) paccept((a), (b), (c), NULL, (d))
-# endif
-#endif
-
-#if defined(__MVS__)
-# include <sys/ioctl.h>
-# include "zos-sys-info.h"
-#endif
-
-#if defined(__linux__)
-# include <sched.h>
-# include <sys/syscall.h>
-# define gettid() syscall(SYS_gettid)
-# define uv__accept4 accept4
-#endif
-
-#if defined(__linux__) && defined(__SANITIZE_THREAD__) && defined(__clang__)
+#if defined(__SANITIZE_THREAD__) && defined(__clang__)
 # include <sanitizer/linux_syscall_hooks.h>
 #endif
 
@@ -102,10 +61,8 @@ static void uv__run_pending(uv_loop_t* loop);
 
 /* Verify that uv_buf_t is ABI-compatible with struct iovec. */
 STATIC_ASSERT(sizeof(uv_buf_t) == sizeof(struct iovec));
-STATIC_ASSERT(sizeof(((uv_buf_t*) 0)->base) ==
-              sizeof(((struct iovec*) 0)->iov_base));
-STATIC_ASSERT(sizeof(((uv_buf_t*) 0)->len) ==
-              sizeof(((struct iovec*) 0)->iov_len));
+STATIC_ASSERT(sizeof(((uv_buf_t*) 0)->base) == sizeof(((struct iovec*) 0)->iov_base));
+STATIC_ASSERT(sizeof(((uv_buf_t*) 0)->len) == sizeof(((struct iovec*) 0)->iov_len));
 STATIC_ASSERT(offsetof(uv_buf_t, base) == offsetof(struct iovec, iov_base));
 STATIC_ASSERT(offsetof(uv_buf_t, len) == offsetof(struct iovec, iov_len));
 
@@ -115,9 +72,10 @@ int uv_clock_gettime(uv_clock_id clock_id, uv_timespec64_t* ts) {
   struct timespec t;
   int r;
 
-  if (ts == NULL)
+  if (ts == NULL) {
     return UV_EFAULT;
-
+  }
+    
   switch (clock_id) {
     default:
       return UV_EINVAL;
@@ -129,8 +87,9 @@ int uv_clock_gettime(uv_clock_id clock_id, uv_timespec64_t* ts) {
       break;
   }
 
-  if (r)
+  if (r) {
     return UV__ERR(errno);
+  }
 
   ts->tv_sec = t.tv_sec;
   ts->tv_nsec = t.tv_nsec;
@@ -193,15 +152,6 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
 
   case UV_FS_EVENT:
     uv__fs_event_close((uv_fs_event_t*)handle);
-#if defined(__sun) || defined(__MVS__)
-    /*
-     * On Solaris, illumos, and z/OS we will not be able to dissociate the
-     * watcher for an event which is pending delivery, so we cannot always call
-     * uv__make_close_pending() straight away. The backend will call the
-     * function once the event has cleared.
-     */
-    return;
-#endif
     break;
 
   case UV_POLL:
@@ -230,26 +180,30 @@ int uv__socket_sockopt(uv_handle_t* handle, int optname, int* value) {
   int fd;
   socklen_t len;
 
-  if (handle == NULL || value == NULL)
+  if (handle == NULL || value == NULL) {
     return UV_EINVAL;
+  }
 
-  if (handle->type == UV_TCP || handle->type == UV_NAMED_PIPE)
+  if (handle->type == UV_TCP || handle->type == UV_NAMED_PIPE) {
     fd = uv__stream_fd((uv_stream_t*) handle);
-  else if (handle->type == UV_UDP)
+  } else if (handle->type == UV_UDP) {
     fd = ((uv_udp_t *) handle)->io_watcher.fd;
-  else
+  } else {
     return UV_ENOTSUP;
+  }
 
   len = sizeof(*value);
 
-  if (*value == 0)
+  if (*value == 0) {
     r = getsockopt(fd, SOL_SOCKET, optname, value, &len);
-  else
+  } else {
     r = setsockopt(fd, SOL_SOCKET, optname, (const void*) value, len);
+  }
 
-  if (r < 0)
+  if (r < 0) {
     return UV__ERR(errno);
-
+  }
+    
   return 0;
 }
 
@@ -387,21 +341,25 @@ static int uv__loop_alive(const uv_loop_t* loop) {
 
 
 static int uv__backend_timeout(const uv_loop_t* loop) {
-  if (loop->stop_flag == 0 &&
-      /* uv__loop_alive(loop) && */
-      (uv__has_active_handles(loop) || uv__has_active_reqs(loop)) &&
-      uv__queue_empty(&loop->pending_queue) &&
-      uv__queue_empty(&loop->idle_handles) &&
-      (loop->flags & UV_LOOP_REAP_CHILDREN) == 0 &&
-      loop->closing_handles == NULL)
+  if (
+    loop->stop_flag == 0 &&
+    /* uv__loop_alive(loop) && */
+    (uv__has_active_handles(loop) || uv__has_active_reqs(loop)) &&
+    uv__queue_empty(&loop->pending_queue) &&
+    uv__queue_empty(&loop->idle_handles) &&
+    (loop->flags & UV_LOOP_REAP_CHILDREN) == 0 &&
+    loop->closing_handles == NULL
+  ) {
     return uv__next_timeout(loop);
+  }
   return 0;
 }
 
 
 int uv_backend_timeout(const uv_loop_t* loop) {
-  if (uv__queue_empty(&loop->watcher_queue))
+  if (uv__queue_empty(&loop->watcher_queue)) {
     return uv__backend_timeout(loop);
+  }
   /* Need to call uv_run to update the backend fd state. */
   return 0;
 }
@@ -418,8 +376,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   int can_sleep;
 
   r = uv__loop_alive(loop);
-  if (!r)
+  if (!r) {
     uv__update_time(loop);
+  }
 
   /* Maintain backwards compatibility by processing timers before entering the
    * while loop for UV_RUN_DEFAULT. Otherwise timers only need to be executed
@@ -431,17 +390,16 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   }
 
   while (r != 0 && loop->stop_flag == 0) {
-    can_sleep =
-        uv__queue_empty(&loop->pending_queue) &&
-        uv__queue_empty(&loop->idle_handles);
+    can_sleep = uv__queue_empty(&loop->pending_queue) && uv__queue_empty(&loop->idle_handles);
 
     uv__run_pending(loop);
     uv__run_idle(loop);
     uv__run_prepare(loop);
 
     timeout = 0;
-    if ((mode == UV_RUN_ONCE && can_sleep) || mode == UV_RUN_DEFAULT)
+    if ((mode == UV_RUN_ONCE && can_sleep) || mode == UV_RUN_DEFAULT) {
       timeout = uv__backend_timeout(loop);
+    }
 
     uv__metrics_inc_loop_count(loop);
 
@@ -449,8 +407,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
 
     /* Process immediate callbacks (e.g. write_cb) a small fixed number of
      * times to avoid loop starvation.*/
-    for (r = 0; r < 8 && !uv__queue_empty(&loop->pending_queue); r++)
+    for (r = 0; r < 8 && !uv__queue_empty(&loop->pending_queue); r++) {
       uv__run_pending(loop);
+    }
 
     /* Run one final update on the provider_idle_time in case uv__io_poll
      * returned because the timeout expired, but no events were received. This
@@ -466,15 +425,17 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     uv__run_timers(loop);
 
     r = uv__loop_alive(loop);
-    if (mode == UV_RUN_ONCE || mode == UV_RUN_NOWAIT)
+    if (mode == UV_RUN_ONCE || mode == UV_RUN_NOWAIT) {
       break;
+    }
   }
 
   /* The if statement lets gcc compile it to a conditional store. Avoids
    * dirtying a cache line.
    */
-  if (loop->stop_flag != 0)
+  if (loop->stop_flag != 0) {
     loop->stop_flag = 0;
+  }
 
   return r;
 }
@@ -497,20 +458,24 @@ int uv__socket(int domain, int type, int protocol) {
 
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
   sockfd = socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol);
-  if (sockfd != -1)
+  if (sockfd != -1) {
     return sockfd;
+  }
 
-  if (errno != EINVAL)
+  if (errno != EINVAL) {
     return UV__ERR(errno);
+  }
 #endif
 
   sockfd = socket(domain, type, protocol);
-  if (sockfd == -1)
+  if (sockfd == -1) {
     return UV__ERR(errno);
+  }
 
   err = uv__nonblock(sockfd, 1);
-  if (err == 0)
+  if (err == 0) {
     err = uv__cloexec(sockfd, 1);
+  }
 
   if (err) {
     uv__close(sockfd);
@@ -533,14 +498,16 @@ FILE* uv__open_file(const char* path) {
   FILE* fp;
 
   fd = uv__open_cloexec(path, O_RDONLY);
-  if (fd < 0)
+  if (fd < 0) {
     return NULL;
+  }
 
-   fp = fdopen(fd, "r");
-   if (fp == NULL)
-     uv__close(fd);
+  fp = fdopen(fd, "r");
+  if (fp == NULL) {
+    uv__close(fd);
+  }
 
-   return fp;
+  return fp;
 }
 
 
@@ -559,8 +526,9 @@ int uv__accept(int sockfd) {
 #endif
   while (peerfd == -1 && errno == EINTR);
 
-  if (peerfd == -1)
+  if (peerfd == -1) {
     return UV__ERR(errno);
+  }
 
 #ifndef uv__accept4
   err = uv__cloexec(peerfd, 1);
@@ -586,24 +554,13 @@ int uv__accept(int sockfd) {
  * by making the system call directly. Musl libc is unaffected.
  */
 int uv__close_nocancel(int fd) {
-#if defined(__APPLE__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdollar-in-identifier-extension"
-#if defined(__LP64__) || TARGET_OS_IPHONE
-  extern int close$NOCANCEL(int);
-  return close$NOCANCEL(fd);
-#else
-  extern int close$NOCANCEL$UNIX2003(int);
-  return close$NOCANCEL$UNIX2003(fd);
-#endif
-#pragma GCC diagnostic pop
-#elif defined(__linux__) && defined(__SANITIZE_THREAD__) && defined(__clang__)
+#if defined(__SANITIZE_THREAD__) && defined(__clang__)
   long rc;
   __sanitizer_syscall_pre_close(fd);
   rc = syscall(SYS_close, fd);
   __sanitizer_syscall_post_close(rc, fd);
   return rc;
-#elif defined(__linux__) && !defined(__SANITIZE_THREAD__)
+#elif !defined(__SANITIZE_THREAD__)
   return syscall(SYS_close, fd);
 #else
   return close(fd);
@@ -621,8 +578,9 @@ int uv__close_nocheckstdio(int fd) {
   rc = uv__close_nocancel(fd);
   if (rc == -1) {
     rc = UV__ERR(errno);
-    if (rc == UV_EINTR || rc == UV__ERR(EINPROGRESS))
+    if (rc == UV_EINTR || rc == UV__ERR(EINPROGRESS)) {
       rc = 0;    /* The close is in progress, not an error. */
+    }
     errno = saved_errno;
   }
 
@@ -632,9 +590,6 @@ int uv__close_nocheckstdio(int fd) {
 
 int uv__close(int fd) {
   assert(fd > STDERR_FILENO);  /* Catch stdio close bugs. */
-#if defined(__MVS__)
-  SAVE_ERRNO(epoll_file_close(fd));
-#endif
   return uv__close_nocheckstdio(fd);
 }
 
@@ -642,12 +597,13 @@ int uv__close(int fd) {
 int uv__nonblock_ioctl(int fd, int set) {
   int r;
 
-  do
+  do {
     r = ioctl(fd, FIONBIO, &set);
-  while (r == -1 && errno == EINTR);
+  } while (r == -1 && errno == EINTR);
 
-  if (r)
+  if (r) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -658,28 +614,32 @@ int uv__nonblock_fcntl(int fd, int set) {
   int flags;
   int r;
 
-  do
+  do {
     r = fcntl(fd, F_GETFL);
-  while (r == -1 && errno == EINTR);
+  } while (r == -1 && errno == EINTR);
 
-  if (r == -1)
+  if (r == -1) {
     return UV__ERR(errno);
+  }
 
   /* Bail out now if already set/clear. */
-  if (!!(r & O_NONBLOCK) == !!set)
+  if (!!(r & O_NONBLOCK) == !!set) {
     return 0;
+  }
 
-  if (set)
+  if (set) {
     flags = r | O_NONBLOCK;
-  else
+  } else {
     flags = r & ~O_NONBLOCK;
-
-  do
+  }
+  
+  do {
     r = fcntl(fd, F_SETFL, flags);
-  while (r == -1 && errno == EINTR);
+  } while (r == -1 && errno == EINTR);
 
-  if (r)
+  if (r) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -690,72 +650,54 @@ int uv__cloexec(int fd, int set) {
   int r;
 
   flags = 0;
-  if (set)
+  if (set) {
     flags = FD_CLOEXEC;
+  }
 
-  do
+  do {
     r = fcntl(fd, F_SETFD, flags);
-  while (r == -1 && errno == EINTR);
+  } while (r == -1 && errno == EINTR);
 
-  if (r)
+  if (r) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
 
 
 ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
-#if defined(__ANDROID__)   || \
-    defined(__DragonFly__) || \
-    defined(__FreeBSD__)   || \
-    defined(__NetBSD__)    || \
-    defined(__OpenBSD__)   || \
-    defined(__linux__)
   ssize_t rc;
   rc = recvmsg(fd, msg, flags | MSG_CMSG_CLOEXEC);
-  if (rc == -1)
+  if (rc == -1) {
     return UV__ERR(errno);
+  }
   return rc;
-#else
-  struct cmsghdr* cmsg;
-  int* pfd;
-  int* end;
-  ssize_t rc;
-  rc = recvmsg(fd, msg, flags);
-  if (rc == -1)
-    return UV__ERR(errno);
-  if (msg->msg_controllen == 0)
-    return rc;
-  for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg))
-    if (cmsg->cmsg_type == SCM_RIGHTS)
-      for (pfd = (int*) CMSG_DATA(cmsg),
-           end = (int*) ((char*) cmsg + cmsg->cmsg_len);
-           pfd < end;
-           pfd += 1)
-        uv__cloexec(*pfd, 1);
-  return rc;
-#endif
 }
 
 
 int uv_cwd(char* buffer, size_t* size) {
   char scratch[1 + UV__PATH_MAX];
 
-  if (buffer == NULL || size == NULL)
+  if (buffer == NULL || size == NULL) {
     return UV_EINVAL;
+  }
 
   /* Try to read directly into the user's buffer first... */
-  if (getcwd(buffer, *size) != NULL)
+  if (getcwd(buffer, *size) != NULL) {
     goto fixup;
+  }
 
-  if (errno != ERANGE)
+  if (errno != ERANGE) {
     return UV__ERR(errno);
+  }
 
   /* ...or into scratch space if the user's buffer is too small
    * so we can report how much space to provide on the next try.
    */
-  if (getcwd(scratch, sizeof(scratch)) == NULL)
+  if (getcwd(scratch, sizeof(scratch)) == NULL) {
     return UV__ERR(errno);
+  }
 
   buffer = scratch;
 
@@ -778,8 +720,9 @@ fixup:
 
 
 int uv_chdir(const char* dir) {
-  if (chdir(dir))
+  if (chdir(dir)) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -791,9 +734,11 @@ void uv_disable_stdio_inheritance(void) {
   /* Set the CLOEXEC flag on all open descriptors. Unconditionally try the
    * first 16 file descriptors. After that, bail out after the first error.
    */
-  for (fd = 0; ; fd++)
-    if (uv__cloexec(fd, 1) && fd > 15)
+  for (fd = 0; ; fd++) {
+    if (uv__cloexec(fd, 1) && fd > 15) {
       break;
+    }
+  }
 }
 
 
@@ -819,8 +764,9 @@ int uv_fileno(const uv_handle_t* handle, uv_os_fd_t* fd) {
     return UV_EINVAL;
   }
 
-  if (uv__is_closing(handle) || fd_out == -1)
+  if (uv__is_closing(handle) || fd_out == -1) {
     return UV_EBADF;
+  }
 
   *fd = fd_out;
   return 0;
@@ -862,8 +808,9 @@ static void maybe_resize(uv_loop_t* loop, unsigned int len) {
   unsigned int nwatchers;
   unsigned int i;
 
-  if (len <= loop->nwatchers)
+  if (len <= loop->nwatchers) {
     return;
+  }
 
   /* Preserve fake watcher list and count at the end of the watchers */
   if (loop->watchers != NULL) {
@@ -875,13 +822,14 @@ static void maybe_resize(uv_loop_t* loop, unsigned int len) {
   }
 
   nwatchers = next_power_of_two(len + 2) - 2;
-  watchers = uv__reallocf(loop->watchers,
-                          (nwatchers + 2) * sizeof(loop->watchers[0]));
+  watchers = uv__reallocf(loop->watchers, (nwatchers + 2) * sizeof(loop->watchers[0]));
 
-  if (watchers == NULL)
+  if (watchers == NULL) {
     abort();
-  for (i = loop->nwatchers; i < nwatchers; i++)
+  }
+  for (i = loop->nwatchers; i < nwatchers; i++) {
     watchers[i] = NULL;
+  }
   watchers[nwatchers] = fake_watcher_list;
   watchers[nwatchers + 1] = fake_watcher_count;
 
@@ -911,17 +859,17 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   w->pevents |= events;
   maybe_resize(loop, w->fd + 1);
 
-#if !defined(__sun)
   /* The event ports backend needs to rearm all file descriptors on each and
    * every tick of the event loop but the other backends allow us to
    * short-circuit here if the event mask is unchanged.
    */
-  if (w->events == w->pevents)
+  if (w->events == w->pevents) {
     return;
-#endif
+  }
 
-  if (uv__queue_empty(&w->watcher_queue))
+  if (uv__queue_empty(&w->watcher_queue)) {
     uv__queue_insert_tail(&loop->watcher_queue, &w->watcher_queue);
+  }
 
   if (loop->watchers[w->fd] == NULL) {
     loop->watchers[w->fd] = w;
@@ -934,14 +882,16 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(0 == (events & ~(POLLIN | POLLOUT | UV__POLLRDHUP | UV__POLLPRI)));
   assert(0 != events);
 
-  if (w->fd == -1)
+  if (w->fd == -1) {
     return;
+  }
 
   assert(w->fd >= 0);
 
   /* Happens when uv__io_stop() is called on a handle that was never started. */
-  if ((unsigned) w->fd >= loop->nwatchers)
+  if ((unsigned) w->fd >= loop->nwatchers) {
     return;
+  }
 
   w->pevents &= ~events;
 
@@ -955,9 +905,9 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       loop->watchers[w->fd] = NULL;
       loop->nfds--;
     }
-  }
-  else if (uv__queue_empty(&w->watcher_queue))
+  } else if (uv__queue_empty(&w->watcher_queue)) {
     uv__queue_insert_tail(&loop->watcher_queue, &w->watcher_queue);
+  }
 }
 
 
@@ -966,14 +916,16 @@ void uv__io_close(uv_loop_t* loop, uv__io_t* w) {
   uv__queue_remove(&w->pending_queue);
 
   /* Remove stale events for this file descriptor */
-  if (w->fd != -1)
+  if (w->fd != -1) {
     uv__platform_invalidate_fd(loop, w->fd);
+  }
 }
 
 
 void uv__io_feed(uv_loop_t* loop, uv__io_t* w) {
-  if (uv__queue_empty(&w->pending_queue))
+  if (uv__queue_empty(&w->pending_queue)) {
     uv__queue_insert_tail(&loop->pending_queue, &w->pending_queue);
+  }
 }
 
 
@@ -992,16 +944,16 @@ int uv__fd_exists(uv_loop_t* loop, int fd) {
 int uv_getrusage(uv_rusage_t* rusage) {
   struct rusage usage;
 
-  if (getrusage(RUSAGE_SELF, &usage))
+  if (getrusage(RUSAGE_SELF, &usage)) {
     return UV__ERR(errno);
-
+  }
+    
   rusage->ru_utime.tv_sec = usage.ru_utime.tv_sec;
   rusage->ru_utime.tv_usec = usage.ru_utime.tv_usec;
 
   rusage->ru_stime.tv_sec = usage.ru_stime.tv_sec;
   rusage->ru_stime.tv_usec = usage.ru_stime.tv_usec;
 
-#if !defined(__MVS__) && !defined(__HAIKU__)
   rusage->ru_maxrss = usage.ru_maxrss;
   rusage->ru_ixrss = usage.ru_ixrss;
   rusage->ru_idrss = usage.ru_idrss;
@@ -1016,16 +968,6 @@ int uv_getrusage(uv_rusage_t* rusage) {
   rusage->ru_nsignals = usage.ru_nsignals;
   rusage->ru_nvcsw = usage.ru_nvcsw;
   rusage->ru_nivcsw = usage.ru_nivcsw;
-#endif
-
-  /* Most platforms report ru_maxrss in kilobytes; macOS and Solaris are
-   * the outliers because of course they are.
-   */
-#if defined(__APPLE__)
-  rusage->ru_maxrss /= 1024;                  /* macOS and iOS report bytes. */
-#elif defined(__sun)
-  rusage->ru_maxrss /= getpagesize() / 1024;  /* Solaris reports pages. */
-#endif
 
   return 0;
 }
@@ -1045,8 +987,9 @@ int uv__open_cloexec(const char* path, int flags) {
   int fd;
 
   fd = open(path, flags);
-  if (fd == -1)
+  if (fd == -1) {
     return UV__ERR(errno);
+  }
 
   err = uv__cloexec(fd, 1);
   if (err) {
@@ -1066,18 +1009,21 @@ int uv__slurp(const char* filename, char* buf, size_t len) {
   assert(len > 0);
 
   fd = uv__open_cloexec(filename, O_RDONLY);
-  if (fd < 0)
+  if (fd < 0) {
     return fd;
+  }
 
-  do
+  do {
     n = read(fd, buf, len - 1);
-  while (n == -1 && errno == EINTR);
+  } while (n == -1 && errno == EINTR);
 
-  if (uv__close_nocheckstdio(fd))
+  if (uv__close_nocheckstdio(fd)) {
     abort();
+  }
 
-  if (n < 0)
+  if (n < 0) {
     return UV__ERR(errno);
+  }
 
   buf[n] = '\0';
 
@@ -1086,30 +1032,14 @@ int uv__slurp(const char* filename, char* buf, size_t len) {
 
 
 int uv__dup2_cloexec(int oldfd, int newfd) {
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__linux__)
   int r;
 
   r = dup3(oldfd, newfd, O_CLOEXEC);
-  if (r == -1)
+  if (r == -1) {
     return UV__ERR(errno);
-
-  return r;
-#else
-  int err;
-  int r;
-
-  r = dup2(oldfd, newfd);  /* Never retry. */
-  if (r == -1)
-    return UV__ERR(errno);
-
-  err = uv__cloexec(newfd, 1);
-  if (err != 0) {
-    uv__close(newfd);
-    return err;
   }
 
   return r;
-#endif
 }
 
 
@@ -1123,8 +1053,9 @@ int uv_os_homedir(char* buffer, size_t* size) {
      uv_os_getenv(). */
   r = uv_os_getenv("HOME", buffer, size);
 
-  if (r != UV_ENOENT)
+  if (r != UV_ENOENT) {
     return r;
+  }
 
   /* HOME is not set, so call uv_os_get_passwd() */
   r = uv_os_get_passwd(&pwd);
@@ -1153,8 +1084,9 @@ int uv_os_tmpdir(char* buffer, size_t* size) {
   const char* buf;
   size_t len;
 
-  if (buffer == NULL || size == NULL || *size == 0)
+  if (buffer == NULL || size == NULL || *size == 0) {
     return UV_EINVAL;
+  }
 
 #define CHECK_ENV_VAR(name)                                                   \
   do {                                                                        \
@@ -1173,11 +1105,7 @@ int uv_os_tmpdir(char* buffer, size_t* size) {
 #undef CHECK_ENV_VAR
 
   /* No temp environment variables defined */
-  #if defined(__ANDROID__)
-    buf = "/data/local/tmp";
-  #else
-    buf = "/tmp";
-  #endif
+  buf = "/tmp";
 
 return_buffer:
   len = strlen(buf);
@@ -1210,8 +1138,9 @@ static int uv__getpwuid_r(uv_passwd_t *pwd, uid_t uid) {
   size_t shell_size;
   int r;
 
-  if (pwd == NULL)
+  if (pwd == NULL) {
     return UV_EINVAL;
+  }
 
   /* Calling sysconf(_SC_GETPW_R_SIZE_MAX) would get the suggested size, but it
    * is frequently 1024 or 4096, so we can just use that directly. The pwent
@@ -1219,25 +1148,30 @@ static int uv__getpwuid_r(uv_passwd_t *pwd, uid_t uid) {
   for (bufsize = 2000;; bufsize *= 2) {
     buf = uv__malloc(bufsize);
 
-    if (buf == NULL)
+    if (buf == NULL) {
       return UV_ENOMEM;
+    }
 
-    do
+    do {
       r = getpwuid_r(uid, &pw, buf, bufsize, &result);
-    while (r == EINTR);
+    } while (r == EINTR);
 
-    if (r != 0 || result == NULL)
+    if (r != 0 || result == NULL) {
       uv__free(buf);
+    }
 
-    if (r != ERANGE)
+    if (r != ERANGE) {
       break;
+    }
   }
 
-  if (r != 0)
+  if (r != 0) {
     return UV__ERR(r);
+  }
 
-  if (result == NULL)
+  if (result == NULL) {
     return UV_ENOENT;
+  }
 
   /* Allocate memory for the username, shell, and home directory */
   name_size = strlen(pw.pw_name) + 1;
@@ -1272,10 +1206,6 @@ static int uv__getpwuid_r(uv_passwd_t *pwd, uid_t uid) {
 
 
 int uv_os_get_group(uv_group_t* grp, uv_uid_t gid) {
-#if defined(__ANDROID__) && __ANDROID_API__ < 24
-  /* This function getgrgid_r() was added in Android N (level 24) */
-  return UV_ENOSYS;
-#else
   struct group gp;
   struct group* result;
   char* buf;
@@ -1286,8 +1216,9 @@ int uv_os_get_group(uv_group_t* grp, uv_uid_t gid) {
   size_t mem_size;
   int r;
 
-  if (grp == NULL)
+  if (grp == NULL) {
     return UV_EINVAL;
+  }
 
   /* Calling sysconf(_SC_GETGR_R_SIZE_MAX) would get the suggested size, but it
    * is frequently 1024 or 4096, so we can just use that directly. The pwent
@@ -1295,25 +1226,30 @@ int uv_os_get_group(uv_group_t* grp, uv_uid_t gid) {
   for (bufsize = 2000;; bufsize *= 2) {
     buf = uv__malloc(bufsize);
 
-    if (buf == NULL)
+    if (buf == NULL) {
       return UV_ENOMEM;
+    }
 
-    do
+    do {
       r = getgrgid_r(gid, &gp, buf, bufsize, &result);
-    while (r == EINTR);
+    } while (r == EINTR);
 
-    if (r != 0 || result == NULL)
+    if (r != 0 || result == NULL) {
       uv__free(buf);
+    }
 
-    if (r != ERANGE)
+    if (r != ERANGE) {
       break;
+    }
   }
 
-  if (r != 0)
+  if (r != 0) {
     return UV__ERR(r);
+  }
 
-  if (result == NULL)
+  if (result == NULL) {
     return UV_ENOENT;
+  }
 
   /* Allocate memory for the groupname and members. */
   name_size = strlen(gp.gr_name) + 1;
@@ -1352,7 +1288,6 @@ int uv_os_get_group(uv_group_t* grp, uv_uid_t gid) {
   uv__free(buf);
 
   return 0;
-#endif
 }
 
 
@@ -1383,19 +1318,22 @@ int uv_os_environ(uv_env_item_t** envitems, int* count) {
 
   *envitems = uv__calloc(i, sizeof(**envitems));
 
-  if (*envitems == NULL)
+  if (*envitems == NULL) {
     return UV_ENOMEM;
+  }
 
   for (j = 0, cnt = 0; j < i; j++) {
     char* buf;
     char* ptr;
 
-    if (environ[j] == NULL)
+    if (environ[j] == NULL) {
       break;
+    }
 
     buf = uv__strdup(environ[j]);
-    if (buf == NULL)
+    if (buf == NULL) {
       goto fail;
+    }
 
     ptr = strchr(buf, '=');
     if (ptr == NULL) {
@@ -1432,13 +1370,15 @@ int uv_os_getenv(const char* name, char* buffer, size_t* size) {
   char* var;
   size_t len;
 
-  if (name == NULL || buffer == NULL || size == NULL || *size == 0)
+  if (name == NULL || buffer == NULL || size == NULL || *size == 0) {
     return UV_EINVAL;
+  }
 
   var = getenv(name);
 
-  if (var == NULL)
+  if (var == NULL) {
     return UV_ENOENT;
+  }
 
   len = strlen(var);
 
@@ -1455,22 +1395,26 @@ int uv_os_getenv(const char* name, char* buffer, size_t* size) {
 
 
 int uv_os_setenv(const char* name, const char* value) {
-  if (name == NULL || value == NULL)
+  if (name == NULL || value == NULL) {
     return UV_EINVAL;
+  }
 
-  if (setenv(name, value, 1) != 0)
+  if (setenv(name, value, 1) != 0) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
 
 
 int uv_os_unsetenv(const char* name) {
-  if (name == NULL)
+  if (name == NULL) {
     return UV_EINVAL;
+  }
 
-  if (unsetenv(name) != 0)
+  if (unsetenv(name) != 0) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -1486,11 +1430,13 @@ int uv_os_gethostname(char* buffer, size_t* size) {
   char buf[UV_MAXHOSTNAMESIZE];
   size_t len;
 
-  if (buffer == NULL || size == NULL || *size == 0)
+  if (buffer == NULL || size == NULL || *size == 0) {
     return UV_EINVAL;
+  }
 
-  if (gethostname(buf, sizeof(buf)) != 0)
+  if (gethostname(buf, sizeof(buf)) != 0) {
     return UV__ERR(errno);
+  }
 
   buf[sizeof(buf) - 1] = '\0'; /* Null terminate, just to be safe. */
   len = strlen(buf);
@@ -1534,14 +1480,16 @@ int uv_cpumask_size(void) {
 int uv_os_getpriority(uv_pid_t pid, int* priority) {
   int r;
 
-  if (priority == NULL)
+  if (priority == NULL) {
     return UV_EINVAL;
+  }
 
   errno = 0;
   r = getpriority(PRIO_PROCESS, (int) pid);
 
-  if (r == -1 && errno != 0)
+  if (r == -1 && errno != 0) {
     return UV__ERR(errno);
+  }
 
   *priority = r;
   return 0;
@@ -1549,11 +1497,13 @@ int uv_os_getpriority(uv_pid_t pid, int* priority) {
 
 
 int uv_os_setpriority(uv_pid_t pid, int priority) {
-  if (priority < UV_PRIORITY_HIGHEST || priority > UV_PRIORITY_LOW)
+  if (priority < UV_PRIORITY_HIGHEST || priority > UV_PRIORITY_LOW) {
     return UV_EINVAL;
+  }
 
-  if (setpriority(PRIO_PROCESS, (int) pid, priority) != 0)
+  if (setpriority(PRIO_PROCESS, (int) pid, priority) != 0) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -1568,48 +1518,47 @@ int uv_thread_getpriority(uv_thread_t tid, int* priority) {
   int r;
   int policy;
   struct sched_param param;
-#ifdef __linux__
   pid_t pid = gettid();
-#endif
 
-  if (priority == NULL)
+  if (priority == NULL) {
     return UV_EINVAL;
+  }
 
   r = pthread_getschedparam(tid, &policy, &param);
-  if (r != 0)
+  if (r != 0) {
     return UV__ERR(errno);
+  }
 
-#ifdef __linux__
   if (SCHED_OTHER == policy && pthread_equal(tid, pthread_self())) {
     errno = 0;
     r = getpriority(PRIO_PROCESS, pid);
-    if (r == -1 && errno != 0)
+    if (r == -1 && errno != 0) {
       return UV__ERR(errno);
+    }
     *priority = r;
     return 0;
   }
-#endif
 
   *priority = param.sched_priority;
   return 0;
 }
 
-#ifdef __linux__
 static int set_nice_for_calling_thread(int priority) {
   int r;
   int nice;
 
-  if (priority < UV_THREAD_PRIORITY_LOWEST || priority > UV_THREAD_PRIORITY_HIGHEST)
+  if (priority < UV_THREAD_PRIORITY_LOWEST || priority > UV_THREAD_PRIORITY_HIGHEST) {
     return UV_EINVAL;
+  }
 
   pid_t pid = gettid();
   nice = 0 - priority * 2;
   r = setpriority(PRIO_PROCESS, pid, nice);
-  if (r != 0)
+  if (r != 0) {
     return UV__ERR(errno);
+  }
   return 0;
 }
-#endif
 
 /**
  * If the function succeeds, the return value is 0.
@@ -1624,32 +1573,29 @@ int uv_thread_setpriority(uv_thread_t tid, int priority) {
   int policy;
   struct sched_param param;
 
-  if (priority < UV_THREAD_PRIORITY_LOWEST || priority > UV_THREAD_PRIORITY_HIGHEST)
+  if (priority < UV_THREAD_PRIORITY_LOWEST || priority > UV_THREAD_PRIORITY_HIGHEST) {
     return UV_EINVAL;
+  }
 
   r = pthread_getschedparam(tid, &policy, &param);
-  if (r != 0)
+  if (r != 0) {
     return UV__ERR(errno);
+  }
 
-#ifdef __linux__
 /**
  * for Linux, when schedule policy is SCHED_OTHER (default), priority must be 0,
  * we should set the nice value in this case.
 */
-  if (SCHED_OTHER == policy && pthread_equal(tid, pthread_self()))
+  if (SCHED_OTHER == policy && pthread_equal(tid, pthread_self())) {
     return set_nice_for_calling_thread(priority);
-#endif
+  }
 
-#ifdef __PASE__
-  min = 1;
-  max = 127;
-#else
   min = sched_get_priority_min(policy);
   max = sched_get_priority_max(policy);
-#endif
 
-  if (min == -1 || max == -1)
+  if (min == -1 || max == -1) {
     return UV__ERR(errno);
+  }
 
   range = max - min;
 
@@ -1676,8 +1622,9 @@ int uv_thread_setpriority(uv_thread_t tid, int priority) {
   if (param.sched_priority != prio) {
     param.sched_priority = prio;
     r = pthread_setschedparam(tid, policy, &param);
-    if (r != 0)
-      return UV__ERR(errno);  
+    if (r != 0) {
+      return UV__ERR(errno);
+    }
   }
 
   return 0;
@@ -1687,8 +1634,9 @@ int uv_os_uname(uv_utsname_t* buffer) {
   struct utsname buf;
   int r;
 
-  if (buffer == NULL)
+  if (buffer == NULL) {
     return UV_EINVAL;
+  }
 
   if (uname(&buf) == -1) {
     r = UV__ERR(errno);
@@ -1696,37 +1644,24 @@ int uv_os_uname(uv_utsname_t* buffer) {
   }
 
   r = uv__strscpy(buffer->sysname, buf.sysname, sizeof(buffer->sysname));
-  if (r == UV_E2BIG)
-    goto error;
-
-#ifdef _AIX
-  r = snprintf(buffer->release,
-               sizeof(buffer->release),
-               "%s.%s",
-               buf.version,
-               buf.release);
-  if (r >= sizeof(buffer->release)) {
-    r = UV_E2BIG;
+  if (r == UV_E2BIG) {
     goto error;
   }
-#else
+
   r = uv__strscpy(buffer->release, buf.release, sizeof(buffer->release));
-  if (r == UV_E2BIG)
+  if (r == UV_E2BIG) {
     goto error;
-#endif
+  }
 
   r = uv__strscpy(buffer->version, buf.version, sizeof(buffer->version));
-  if (r == UV_E2BIG)
+  if (r == UV_E2BIG) {
     goto error;
+  }
 
-#if defined(_AIX) || defined(__PASE__)
-  r = uv__strscpy(buffer->machine, "ppc64", sizeof(buffer->machine));
-#else
   r = uv__strscpy(buffer->machine, buf.machine, sizeof(buffer->machine));
-#endif
-
-  if (r == UV_E2BIG)
+  if (r == UV_E2BIG) {
     goto error;
+  }
 
   return 0;
 
@@ -1738,23 +1673,22 @@ error:
   return r;
 }
 
-int uv__getsockpeername(const uv_handle_t* handle,
-                        uv__peersockfunc func,
-                        struct sockaddr* name,
-                        int* namelen) {
+int uv__getsockpeername(const uv_handle_t* handle, uv__peersockfunc func, struct sockaddr* name, int* namelen) {
   socklen_t socklen;
   uv_os_fd_t fd;
   int r;
 
   r = uv_fileno(handle, &fd);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
   /* sizeof(socklen_t) != sizeof(int) on some systems. */
   socklen = (socklen_t) *namelen;
 
-  if (func(fd, name, &socklen))
+  if (func(fd, name, &socklen)) {
     return UV__ERR(errno);
+  }
 
   *namelen = (int) socklen;
   return 0;
@@ -1763,11 +1697,13 @@ int uv__getsockpeername(const uv_handle_t* handle,
 int uv_gettimeofday(uv_timeval64_t* tv) {
   struct timeval time;
 
-  if (tv == NULL)
+  if (tv == NULL) {
     return UV_EINVAL;
+  }
 
-  if (gettimeofday(&time, NULL) != 0)
+  if (gettimeofday(&time, NULL) != 0) {
     return UV__ERR(errno);
+  }
 
   tv->tv_sec = (int64_t) time.tv_sec;
   tv->tv_usec = (int32_t) time.tv_usec;
@@ -1781,9 +1717,9 @@ void uv_sleep(unsigned int msec) {
   timeout.tv_sec = msec / 1000;
   timeout.tv_nsec = (msec % 1000) * 1000 * 1000;
 
-  do
+  do {
     rc = nanosleep(&timeout, &timeout);
-  while (rc == -1 && errno == EINTR);
+  } while (rc == -1 && errno == EINTR);
 
   assert(rc == 0);
 }
@@ -1797,8 +1733,9 @@ int uv__search_path(const char* prog, char* buf, size_t* buflen) {
   char* token;
   char* itr;
 
-  if (buf == NULL || buflen == NULL || *buflen == 0)
+  if (buf == NULL || buflen == NULL || *buflen == 0) {
     return UV_EINVAL;
+  }
 
   /*
    * Possibilities for prog:
@@ -1810,14 +1747,16 @@ int uv__search_path(const char* prog, char* buf, size_t* buflen) {
 
   /* Case i) and ii) absolute or relative paths */
   if (strchr(prog, '/') != NULL) {
-    if (realpath(prog, abspath) != abspath)
+    if (realpath(prog, abspath) != abspath) {
       return UV__ERR(errno);
+    }
 
     abspath_size = strlen(abspath);
 
     *buflen -= 1;
-    if (*buflen > abspath_size)
+    if (*buflen > abspath_size) {
       *buflen = abspath_size;
+    }
 
     memcpy(buf, abspath, *buflen);
     buf[*buflen] = '\0';
@@ -1830,12 +1769,14 @@ int uv__search_path(const char* prog, char* buf, size_t* buflen) {
   token = NULL;
   path_env = getenv("PATH");
 
-  if (path_env == NULL)
+  if (path_env == NULL) {
     return UV_EINVAL;
+  }
 
   cloned_path = uv__strdup(path_env);
-  if (cloned_path == NULL)
+  if (cloned_path == NULL) {
     return UV_ENOMEM;
+  }
 
   token = uv__strtok(cloned_path, ":", &itr);
   while (token != NULL) {
@@ -1846,8 +1787,9 @@ int uv__search_path(const char* prog, char* buf, size_t* buflen) {
         abspath_size = strlen(abspath);
 
         *buflen -= 1;
-        if (*buflen > abspath_size)
+        if (*buflen > abspath_size) {
           *buflen = abspath_size;
+        }
 
         memcpy(buf, abspath, *buflen);
         buf[*buflen] = '\0';
@@ -1866,7 +1808,6 @@ int uv__search_path(const char* prog, char* buf, size_t* buflen) {
 
 
 unsigned int uv_available_parallelism(void) {
-#ifdef __linux__
   cpu_set_t set;
   long rc;
   double rc_with_cgroup;
@@ -1878,35 +1819,21 @@ unsigned int uv_available_parallelism(void) {
    * glibc it's... complicated... so for consistency try sched_getaffinity()
    * before falling back to sysconf(_SC_NPROCESSORS_ONLN).
    */
-  if (0 == sched_getaffinity(0, sizeof(set), &set))
+  if (0 == sched_getaffinity(0, sizeof(set), &set)) {
     rc = CPU_COUNT(&set);
-  else
+  } else {
     rc = sysconf(_SC_NPROCESSORS_ONLN);
+  }
     
   if (uv__get_constrained_cpu(&c) == 0 && c.period_length > 0) {
     rc_with_cgroup = (double)c.quota_per_period / c.period_length * c.proportions;
-    if (rc_with_cgroup < rc)
+    if (rc_with_cgroup < rc) {
       rc = (long)rc_with_cgroup; /* Casting is safe since rc_with_cgroup < rc < LONG_MAX */
+    }
   }
-  if (rc < 1) 
+  if (rc < 1) {
     rc = 1;
+  }
 
   return (unsigned) rc;
-#elif defined(__MVS__)
-  int rc;
-
-  rc = __get_num_online_cpus();
-  if (rc < 1)
-    rc = 1;
-
-  return (unsigned) rc;
-#else  /* __linux__ */
-  long rc;
-
-  rc = sysconf(_SC_NPROCESSORS_ONLN);
-  if (rc < 1)
-    rc = 1;
-
-  return (unsigned) rc;
-#endif  /* __linux__ */
 }
