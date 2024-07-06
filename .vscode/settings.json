@@ -1,6 +1,14 @@
 {
     "files.associations": {
         "uv.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "internal.h": "c",
+        "uv-common.h": "c",
+        "heap-inl.h": "c",
+        "linux.h": "c",
+        "if.h": "c",
+        "type_traits": "c",
+        "socket.h": "c",
+        "un.h": "c"
     }
 }
