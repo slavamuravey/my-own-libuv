@@ -27,11 +27,7 @@
 
 
 static struct heap *timer_heap(const uv_loop_t* loop) {
-#ifdef _WIN32
-  return (struct heap*) loop->timer_heap;
-#else
   return (struct heap*) &loop->timer_heap;
-#endif
 }
 
 
@@ -43,10 +39,12 @@ static int timer_less_than(const struct heap_node* ha,
   a = container_of(ha, uv_timer_t, node.heap);
   b = container_of(hb, uv_timer_t, node.heap);
 
-  if (a->timeout < b->timeout)
+  if (a->timeout < b->timeout) {
     return 1;
-  if (b->timeout < a->timeout)
+  }
+  if (b->timeout < a->timeout) {
     return 0;
+  }
 
   /* Compare start_id when both have the same timeout. start_id is
    * allocated with loop->timer_counter in uv_timer_start().
@@ -71,14 +69,16 @@ int uv_timer_start(uv_timer_t* handle,
                    uint64_t repeat) {
   uint64_t clamped_timeout;
 
-  if (uv__is_closing(handle) || cb == NULL)
+  if (uv__is_closing(handle) || cb == NULL) {
     return UV_EINVAL;
+  }
 
   uv_timer_stop(handle);
 
   clamped_timeout = handle->loop->time + timeout;
-  if (clamped_timeout < timeout)
+  if (clamped_timeout < timeout) {
     clamped_timeout = (uint64_t) -1;
+  }
 
   handle->timer_cb = cb;
   handle->timeout = clamped_timeout;
@@ -111,8 +111,9 @@ int uv_timer_stop(uv_timer_t* handle) {
 
 
 int uv_timer_again(uv_timer_t* handle) {
-  if (handle->timer_cb == NULL)
+  if (handle->timer_cb == NULL) {
     return UV_EINVAL;
+  }
 
   if (handle->repeat) {
     uv_timer_stop(handle);
@@ -134,8 +135,9 @@ uint64_t uv_timer_get_repeat(const uv_timer_t* handle) {
 
 
 uint64_t uv_timer_get_due_in(const uv_timer_t* handle) {
-  if (handle->loop->time >= handle->timeout)
+  if (handle->loop->time >= handle->timeout) {
     return 0;
+  }
 
   return handle->timeout - handle->loop->time;
 }
@@ -147,16 +149,19 @@ int uv__next_timeout(const uv_loop_t* loop) {
   uint64_t diff;
 
   heap_node = heap_min(timer_heap(loop));
-  if (heap_node == NULL)
+  if (heap_node == NULL) {
     return -1; /* block indefinitely */
+  }
 
   handle = container_of(heap_node, uv_timer_t, node.heap);
-  if (handle->timeout <= loop->time)
+  if (handle->timeout <= loop->time) {
     return 0;
+  }
 
   diff = handle->timeout - loop->time;
-  if (diff > INT_MAX)
+  if (diff > INT_MAX) {
     diff = INT_MAX;
+  }
 
   return (int) diff;
 }
@@ -172,12 +177,14 @@ void uv__run_timers(uv_loop_t* loop) {
 
   for (;;) {
     heap_node = heap_min(timer_heap(loop));
-    if (heap_node == NULL)
+    if (heap_node == NULL) {
       break;
+    }
 
     handle = container_of(heap_node, uv_timer_t, node.heap);
-    if (handle->timeout > loop->time)
+    if (handle->timeout > loop->time) {
       break;
+    }
 
     uv_timer_stop(handle);
     uv__queue_insert_tail(&ready_queue, &handle->node.queue);

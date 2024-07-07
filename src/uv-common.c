@@ -51,26 +51,30 @@ static uv__allocator_t uv__allocator = {
 char* uv__strdup(const char* s) {
   size_t len = strlen(s) + 1;
   char* m = uv__malloc(len);
-  if (m == NULL)
+  if (m == NULL) {
     return NULL;
+  }
   return memcpy(m, s, len);
 }
 
 char* uv__strndup(const char* s, size_t n) {
   char* m;
   size_t len = strlen(s);
-  if (n < len)
+  if (n < len) {
     len = n;
+  }
   m = uv__malloc(len + 1);
-  if (m == NULL)
+  if (m == NULL) {
     return NULL;
+  }
   m[len] = '\0';
   return memcpy(m, s, len);
 }
 
 void* uv__malloc(size_t size) {
-  if (size > 0)
+  if (size > 0) {
     return uv__allocator.local_malloc(size);
+  }
   return NULL;
 }
 
@@ -90,8 +94,9 @@ void* uv__calloc(size_t count, size_t size) {
 }
 
 void* uv__realloc(void* ptr, size_t size) {
-  if (size > 0)
+  if (size > 0) {
     return uv__allocator.local_realloc(ptr, size);
+  }
   uv__free(ptr);
   return NULL;
 }
@@ -100,9 +105,11 @@ void* uv__reallocf(void* ptr, size_t size) {
   void* newptr;
 
   newptr = uv__realloc(ptr, size);
-  if (newptr == NULL)
-    if (size > 0)
+  if (newptr == NULL) {
+    if (size > 0) {
       uv__free(ptr);
+    }
+  }
 
   return newptr;
 }
@@ -111,8 +118,7 @@ int uv_replace_allocator(uv_malloc_func malloc_func,
                          uv_realloc_func realloc_func,
                          uv_calloc_func calloc_func,
                          uv_free_func free_func) {
-  if (malloc_func == NULL || realloc_func == NULL ||
-      calloc_func == NULL || free_func == NULL) {
+  if (malloc_func == NULL || realloc_func == NULL || calloc_func == NULL || free_func == NULL) {
     return UV_EINVAL;
   }
 
@@ -126,17 +132,15 @@ int uv_replace_allocator(uv_malloc_func malloc_func,
 
 
 void uv_os_free_passwd(uv_passwd_t* pwd) {
-  if (pwd == NULL)
+  if (pwd == NULL) {
     return;
+  }
 
   /* On unix, the memory for name, shell, and homedir are allocated in a single
    * uv__malloc() call. The base of the pointer is stored in pwd->username, so
    * that is the field that needs to be freed.
    */
   uv__free(pwd->username);
-#ifdef _WIN32
-  uv__free(pwd->homedir);
-#endif
   pwd->username = NULL;
   pwd->shell = NULL;
   pwd->homedir = NULL;
@@ -144,8 +148,9 @@ void uv_os_free_passwd(uv_passwd_t* pwd) {
 
 
 void uv_os_free_group(uv_group_t *grp) {
-  if (grp == NULL)
+  if (grp == NULL) {
     return;
+  }
 
   /* The memory for is allocated in a single uv__malloc() call. The base of the
    * pointer is stored in grp->members, so that is the only field that needs to
@@ -273,8 +278,9 @@ int uv_ip6_addr(const char* ip, int port, struct sockaddr_in6* addr) {
   zone_index = strchr(ip, '%');
   if (zone_index != NULL) {
     address_part_size = zone_index - ip;
-    if (address_part_size >= sizeof(address_part))
+    if (address_part_size >= sizeof(address_part)) {
       address_part_size = sizeof(address_part) - 1;
+    }
 
     memcpy(address_part, ip, address_part_size);
     address_part[address_part_size] = '\0';
@@ -282,11 +288,7 @@ int uv_ip6_addr(const char* ip, int port, struct sockaddr_in6* addr) {
 
     zone_index++; /* skip '%' */
     /* NOTE: unknown interface (id=0) is silently ignored */
-#ifdef _WIN32
-    addr->sin6_scope_id = atoi(zone_index);
-#else
     addr->sin6_scope_id = if_nametoindex(zone_index);
-#endif
   }
 
   return uv_inet_pton(AF_INET6, ip, &addr->sin6_addr);
@@ -327,12 +329,13 @@ int uv_tcp_bind(uv_tcp_t* handle,
   if (uv__is_closing(handle)) {
     return UV_EINVAL;
   }
-  if (addr->sa_family == AF_INET)
+  if (addr->sa_family == AF_INET) {
     addrlen = sizeof(struct sockaddr_in);
-  else if (addr->sa_family == AF_INET6)
+  } else if (addr->sa_family == AF_INET6) {
     addrlen = sizeof(struct sockaddr_in6);
-  else
+  } else {
     return UV_EINVAL;
+  }
 
   return uv__tcp_bind(handle, addr, addrlen, flags);
 }
@@ -345,19 +348,23 @@ int uv_udp_init_ex(uv_loop_t* loop, uv_udp_t* handle, unsigned flags) {
 
   /* Use the lower 8 bits for the domain. */
   domain = flags & 0xFF;
-  if (domain != AF_INET && domain != AF_INET6 && domain != AF_UNSPEC)
+  if (domain != AF_INET && domain != AF_INET6 && domain != AF_UNSPEC) {
     return UV_EINVAL;
+  }
 
   /* Use the higher bits for extra flags. */
   extra_flags = flags & ~0xFF;
-  if (extra_flags & ~UV_UDP_RECVMMSG)
+  if (extra_flags & ~UV_UDP_RECVMMSG) {
     return UV_EINVAL;
+  }
 
   rc = uv__udp_init_ex(loop, handle, flags, domain);
 
-  if (rc == 0)
-    if (extra_flags & UV_UDP_RECVMMSG)
+  if (rc == 0) {
+    if (extra_flags & UV_UDP_RECVMMSG) {
       handle->flags |= UV_HANDLE_UDP_RECVMMSG;
+    }
+  }
 
   return rc;
 }
@@ -373,15 +380,17 @@ int uv_udp_bind(uv_udp_t* handle,
                 unsigned int flags) {
   unsigned int addrlen;
 
-  if (handle->type != UV_UDP)
+  if (handle->type != UV_UDP) {
     return UV_EINVAL;
+  }
 
-  if (addr->sa_family == AF_INET)
+  if (addr->sa_family == AF_INET) {
     addrlen = sizeof(struct sockaddr_in);
-  else if (addr->sa_family == AF_INET6)
+  } else if (addr->sa_family == AF_INET6) {
     addrlen = sizeof(struct sockaddr_in6);
-  else
+  } else {
     return UV_EINVAL;
+  }
 
   return uv__udp_bind(handle, addr, addrlen, flags);
 }
@@ -393,15 +402,17 @@ int uv_tcp_connect(uv_connect_t* req,
                    uv_connect_cb cb) {
   unsigned int addrlen;
 
-  if (handle->type != UV_TCP)
+  if (handle->type != UV_TCP) {
     return UV_EINVAL;
+  }
 
-  if (addr->sa_family == AF_INET)
+  if (addr->sa_family == AF_INET) {
     addrlen = sizeof(struct sockaddr_in);
-  else if (addr->sa_family == AF_INET6)
+  } else if (addr->sa_family == AF_INET6) {
     addrlen = sizeof(struct sockaddr_in6);
-  else
+  } else {
     return UV_EINVAL;
+  }
 
   return uv__tcp_connect(req, handle, addr, addrlen, cb);
 }
@@ -410,26 +421,30 @@ int uv_tcp_connect(uv_connect_t* req,
 int uv_udp_connect(uv_udp_t* handle, const struct sockaddr* addr) {
   unsigned int addrlen;
 
-  if (handle->type != UV_UDP)
+  if (handle->type != UV_UDP) {
     return UV_EINVAL;
+  }
 
   /* Disconnect the handle */
   if (addr == NULL) {
-    if (!(handle->flags & UV_HANDLE_UDP_CONNECTED))
+    if (!(handle->flags & UV_HANDLE_UDP_CONNECTED)) {
       return UV_ENOTCONN;
+    }
 
     return uv__udp_disconnect(handle);
   }
 
-  if (addr->sa_family == AF_INET)
+  if (addr->sa_family == AF_INET) {
     addrlen = sizeof(struct sockaddr_in);
-  else if (addr->sa_family == AF_INET6)
+  } else if (addr->sa_family == AF_INET6) {
     addrlen = sizeof(struct sockaddr_in6);
-  else
+  } else {
     return UV_EINVAL;
+  }
 
-  if (handle->flags & UV_HANDLE_UDP_CONNECTED)
+  if (handle->flags & UV_HANDLE_UDP_CONNECTED) {
     return UV_EISCONN;
+  }
 
   return uv__udp_connect(handle, addr, addrlen);
 }
@@ -438,12 +453,14 @@ int uv_udp_connect(uv_udp_t* handle, const struct sockaddr* addr) {
 int uv__udp_is_connected(uv_udp_t* handle) {
   struct sockaddr_storage addr;
   int addrlen;
-  if (handle->type != UV_UDP)
+  if (handle->type != UV_UDP) {
     return 0;
+  }
 
   addrlen = sizeof(addr);
-  if (uv_udp_getpeername(handle, (struct sockaddr*) &addr, &addrlen) != 0)
+  if (uv_udp_getpeername(handle, (struct sockaddr*) &addr, &addrlen) != 0) {
     return 0;
+  }
 
   return addrlen > 0;
 }
@@ -452,26 +469,30 @@ int uv__udp_is_connected(uv_udp_t* handle) {
 int uv__udp_check_before_send(uv_udp_t* handle, const struct sockaddr* addr) {
   unsigned int addrlen;
 
-  if (handle->type != UV_UDP)
+  if (handle->type != UV_UDP) {
     return UV_EINVAL;
+  }
 
-  if (addr != NULL && (handle->flags & UV_HANDLE_UDP_CONNECTED))
+  if (addr != NULL && (handle->flags & UV_HANDLE_UDP_CONNECTED)) {
     return UV_EISCONN;
+  }
 
-  if (addr == NULL && !(handle->flags & UV_HANDLE_UDP_CONNECTED))
+  if (addr == NULL && !(handle->flags & UV_HANDLE_UDP_CONNECTED)) {
     return UV_EDESTADDRREQ;
+  }
 
   if (addr != NULL) {
-    if (addr->sa_family == AF_INET)
+    if (addr->sa_family == AF_INET) {
       addrlen = sizeof(struct sockaddr_in);
-    else if (addr->sa_family == AF_INET6)
+    } else if (addr->sa_family == AF_INET6) {
       addrlen = sizeof(struct sockaddr_in6);
-#if defined(AF_UNIX) && !defined(_WIN32)
-    else if (addr->sa_family == AF_UNIX)
+#if defined(AF_UNIX)
+    } else if (addr->sa_family == AF_UNIX) {
       addrlen = sizeof(struct sockaddr_un);
 #endif
-    else
+    } else {
       return UV_EINVAL;
+    }
   } else {
     addrlen = 0;
   }
@@ -489,8 +510,9 @@ int uv_udp_send(uv_udp_send_t* req,
   int addrlen;
 
   addrlen = uv__udp_check_before_send(handle, addr);
-  if (addrlen < 0)
+  if (addrlen < 0) {
     return addrlen;
+  }
 
   return uv__udp_send(req, handle, bufs, nbufs, addr, addrlen, send_cb);
 }
@@ -503,8 +525,9 @@ int uv_udp_try_send(uv_udp_t* handle,
   int addrlen;
 
   addrlen = uv__udp_check_before_send(handle, addr);
-  if (addrlen < 0)
+  if (addrlen < 0) {
     return addrlen;
+  }
 
   return uv__udp_try_send(handle, bufs, nbufs, addr, addrlen);
 }
@@ -513,18 +536,20 @@ int uv_udp_try_send(uv_udp_t* handle,
 int uv_udp_recv_start(uv_udp_t* handle,
                       uv_alloc_cb alloc_cb,
                       uv_udp_recv_cb recv_cb) {
-  if (handle->type != UV_UDP || alloc_cb == NULL || recv_cb == NULL)
+  if (handle->type != UV_UDP || alloc_cb == NULL || recv_cb == NULL) {
     return UV_EINVAL;
-  else
+  } else {
     return uv__udp_recv_start(handle, alloc_cb, recv_cb);
+  }
 }
 
 
 int uv_udp_recv_stop(uv_udp_t* handle) {
-  if (handle->type != UV_UDP)
+  if (handle->type != UV_UDP) {
     return UV_EINVAL;
-  else
+  } else {
     return uv__udp_recv_stop(handle);
+  }
 }
 
 
@@ -552,17 +577,20 @@ static void uv__print_handles(uv_loop_t* loop, int only_active, FILE* stream) {
   struct uv__queue* q;
   uv_handle_t* h;
 
-  if (loop == NULL)
+  if (loop == NULL) {
     loop = uv_default_loop();
+  }
 
-  if (stream == NULL)
+  if (stream == NULL) {
     stream = stderr;
+  }
 
   uv__queue_foreach(q, &loop->handle_queue) {
     h = uv__queue_data(q, uv_handle_t, handle_queue);
 
-    if (only_active && !uv__is_active(h))
+    if (only_active && !uv__is_active(h)) {
       continue;
+    }
 
     switch (h->type) {
 #define X(uc, lc) case UV_##uc: type = #lc; break;
@@ -623,8 +651,9 @@ size_t uv__count_bufs(const uv_buf_t bufs[], unsigned int nbufs) {
   size_t bytes;
 
   bytes = 0;
-  for (i = 0; i < nbufs; i++)
+  for (i = 0; i < nbufs; i++) {
     bytes += (size_t) bufs[i].len;
+  }
 
   return bytes;
 }
@@ -663,22 +692,15 @@ int uv_fs_event_getpath(uv_fs_event_t* handle, char* buffer, size_t* size) {
  * contained in a nested union/struct) so this function locates it.
 */
 static unsigned int* uv__get_nbufs(uv_fs_t* req) {
-#ifdef _WIN32
-  return &req->fs.info.nbufs;
-#else
   return &req->nbufs;
-#endif
 }
 
 /* uv_fs_scandir() uses the system allocator to allocate memory on non-Windows
  * systems. So, the memory should be released using free(). On Windows,
  * uv__malloc() is used, so use uv__free() to free memory.
 */
-#ifdef _WIN32
-# define uv__fs_scandir_free uv__free
-#else
-# define uv__fs_scandir_free free
-#endif
+
+#define uv__fs_scandir_free free
 
 void uv__fs_scandir_cleanup(uv_fs_t* req) {
   uv__dirent_t** dents;
@@ -691,12 +713,14 @@ void uv__fs_scandir_cleanup(uv_fs_t* req) {
     nbufs = uv__get_nbufs(req);
 
     i = 0;
-    if (*nbufs > 0)
+    if (*nbufs > 0) {
       i = *nbufs - 1;
+    }
 
     n = (unsigned int) req->result;
-    for (; i < n; i++)
+    for (; i < n; i++) {
       uv__fs_scandir_free(dents[i]);
+    }
   }
 
   uv__fs_scandir_free(req->ptr);
@@ -710,12 +734,14 @@ int uv_fs_scandir_next(uv_fs_t* req, uv_dirent_t* ent) {
   unsigned int* nbufs;
 
   /* Check to see if req passed */
-  if (req->result < 0)
+  if (req->result < 0) {
     return req->result;
+  }
 
   /* Ptr will be null if req was canceled or no files found */
-  if (!req->ptr)
+  if (!req->ptr) {
     return UV_EOF;
+  }
 
   nbufs = uv__get_nbufs(req);
   assert(nbufs);
@@ -723,8 +749,9 @@ int uv_fs_scandir_next(uv_fs_t* req, uv_dirent_t* ent) {
   dents = req->ptr;
 
   /* Free previous entity */
-  if (*nbufs > 0)
+  if (*nbufs > 0) {
     uv__fs_scandir_free(dents[*nbufs - 1]);
+  }
 
   /* End was already reached */
   if (*nbufs == (unsigned int) req->result) {
@@ -782,15 +809,17 @@ void uv__fs_readdir_cleanup(uv_fs_t* req) {
   uv_dirent_t* dirents;
   int i;
 
-  if (req->ptr == NULL)
+  if (req->ptr == NULL) {
     return;
+  }
 
   dir = req->ptr;
   dirents = dir->dirents;
   req->ptr = NULL;
 
-  if (dirents == NULL)
+  if (dirents == NULL) {
     return;
+  }
 
   for (i = 0; i < req->result; ++i) {
     uv__free((char*) dirents[i].name);
@@ -817,11 +846,13 @@ static uv_loop_t* default_loop_ptr;
 
 
 uv_loop_t* uv_default_loop(void) {
-  if (default_loop_ptr != NULL)
+  if (default_loop_ptr != NULL) {
     return default_loop_ptr;
+  }
 
-  if (uv_loop_init(&default_loop_struct))
+  if (uv_loop_init(&default_loop_struct)) {
     return NULL;
+  }
 
   default_loop_ptr = &default_loop_struct;
   return default_loop_ptr;
@@ -832,8 +863,9 @@ uv_loop_t* uv_loop_new(void) {
   uv_loop_t* loop;
 
   loop = uv__malloc(sizeof(*loop));
-  if (loop == NULL)
+  if (loop == NULL) {
     return NULL;
+  }
 
   if (uv_loop_init(loop)) {
     uv__free(loop);
@@ -851,13 +883,15 @@ int uv_loop_close(uv_loop_t* loop) {
   void* saved_data;
 #endif
 
-  if (uv__has_active_reqs(loop))
+  if (uv__has_active_reqs(loop)) {
     return UV_EBUSY;
+  }
 
   uv__queue_foreach(q, &loop->handle_queue) {
     h = uv__queue_data(q, uv_handle_t, handle_queue);
-    if (!(h->flags & UV_HANDLE_INTERNAL))
+    if (!(h->flags & UV_HANDLE_INTERNAL)) {
       return UV_EBUSY;
+    }
   }
 
   uv__loop_close(loop);
@@ -867,8 +901,9 @@ int uv_loop_close(uv_loop_t* loop) {
   memset(loop, -1, sizeof(*loop));
   loop->data = saved_data;
 #endif
-  if (loop == default_loop_ptr)
+  if (loop == default_loop_ptr) {
     default_loop_ptr = NULL;
+  }
 
   return 0;
 }
@@ -883,25 +918,28 @@ void uv_loop_delete(uv_loop_t* loop) {
   err = uv_loop_close(loop);
   (void) err;    /* Squelch compiler warnings. */
   assert(err == 0);
-  if (loop != default_loop)
+  if (loop != default_loop) {
     uv__free(loop);
+  }
 }
 
 
-int uv_read_start(uv_stream_t* stream,
-                  uv_alloc_cb alloc_cb,
-                  uv_read_cb read_cb) {
-  if (stream == NULL || alloc_cb == NULL || read_cb == NULL)
+int uv_read_start(uv_stream_t* stream, uv_alloc_cb alloc_cb, uv_read_cb read_cb) {
+  if (stream == NULL || alloc_cb == NULL || read_cb == NULL) {
     return UV_EINVAL;
+  }
 
-  if (stream->flags & UV_HANDLE_CLOSING)
+  if (stream->flags & UV_HANDLE_CLOSING) {
     return UV_EINVAL;
+  }
 
-  if (stream->flags & UV_HANDLE_READING)
+  if (stream->flags & UV_HANDLE_READING) {
     return UV_EALREADY;
+  }
 
-  if (!(stream->flags & UV_HANDLE_READABLE))
+  if (!(stream->flags & UV_HANDLE_READABLE)) {
     return UV_ENOTCONN;
+  }
 
   return uv__read_start(stream, alloc_cb, read_cb);
 }
@@ -919,17 +957,8 @@ void uv_os_free_environ(uv_env_item_t* envitems, int count) {
 
 
 void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
-#ifdef __linux__
   (void) &count;
   uv__free(cpu_infos);
-#else
-  int i;
-
-  for (i = 0; i < count; i++)
-    uv__free(cpu_infos[i].model);
-
-  uv__free(cpu_infos);
-#endif  /* __linux__ */
 }
 
 
@@ -937,23 +966,19 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
  * threads have already been forcibly terminated by the operating system
  * by the time destructors run, ergo, it's not safe to try to clean them up.
  */
-#if defined(__GNUC__) && !defined(_WIN32)
+#if defined(__GNUC__)
 __attribute__((destructor))
 #endif
 void uv_library_shutdown(void) {
   static int was_shutdown;
 
-  if (uv__exchange_int_relaxed(&was_shutdown, 1))
+  if (uv__exchange_int_relaxed(&was_shutdown, 1)) {
     return;
+  }
 
   uv__process_title_cleanup();
   uv__signal_cleanup();
-#ifdef __MVS__
-  /* TODO(itodorov) - zos: revisit when Woz compiler is available. */
-  uv__os390_cleanup();
-#else
   uv__threadpool_cleanup();
-#endif
 }
 
 
@@ -962,8 +987,9 @@ void uv__metrics_update_idle_time(uv_loop_t* loop) {
   uint64_t entry_time;
   uint64_t exit_time;
 
-  if (!(uv__get_internal_fields(loop)->flags & UV_METRICS_IDLE_TIME))
+  if (!(uv__get_internal_fields(loop)->flags & UV_METRICS_IDLE_TIME)) {
     return;
+  }
 
   loop_metrics = uv__get_loop_metrics(loop);
 
@@ -971,8 +997,9 @@ void uv__metrics_update_idle_time(uv_loop_t* loop) {
    * thread that sets provider_entry_time. So it's unnecessary to lock before
    * retrieving this value.
    */
-  if (loop_metrics->provider_entry_time == 0)
+  if (loop_metrics->provider_entry_time == 0) {
     return;
+  }
 
   exit_time = uv_hrtime();
 
@@ -988,8 +1015,9 @@ void uv__metrics_set_provider_entry_time(uv_loop_t* loop) {
   uv__loop_metrics_t* loop_metrics;
   uint64_t now;
 
-  if (!(uv__get_internal_fields(loop)->flags & UV_METRICS_IDLE_TIME))
+  if (!(uv__get_internal_fields(loop)->flags & UV_METRICS_IDLE_TIME)) {
     return;
+  }
 
   now = uv_hrtime();
   loop_metrics = uv__get_loop_metrics(loop);
@@ -1019,7 +1047,8 @@ uint64_t uv_metrics_idle_time(uv_loop_t* loop) {
   entry_time = loop_metrics->provider_entry_time;
   uv_mutex_unlock(&loop_metrics->lock);
 
-  if (entry_time > 0)
+  if (entry_time > 0) {
     idle_time += uv_hrtime() - entry_time;
+  }
   return idle_time;
 }

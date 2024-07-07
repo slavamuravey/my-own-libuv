@@ -236,15 +236,13 @@ void uv__threadpool_cleanup(void);
 #define uv__req_register(loop, req)                                           \
   do {                                                                        \
     (loop)->active_reqs.count++;                                              \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__req_unregister(loop, req)                                         \
   do {                                                                        \
     assert(uv__has_active_reqs(loop));                                        \
     (loop)->active_reqs.count--;                                              \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__has_active_handles(loop)                                          \
   ((loop)->active_handles > 0)
@@ -252,14 +250,12 @@ void uv__threadpool_cleanup(void);
 #define uv__active_handle_add(h)                                              \
   do {                                                                        \
     (h)->loop->active_handles++;                                              \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__active_handle_rm(h)                                               \
   do {                                                                        \
     (h)->loop->active_handles--;                                              \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__is_active(h)                                                      \
   (((h)->flags & UV_HANDLE_ACTIVE) != 0)
@@ -275,16 +271,14 @@ void uv__threadpool_cleanup(void);
     if (((h)->flags & UV_HANDLE_ACTIVE) != 0) break;                          \
     (h)->flags |= UV_HANDLE_ACTIVE;                                           \
     if (((h)->flags & UV_HANDLE_REF) != 0) uv__active_handle_add(h);          \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__handle_stop(h)                                                    \
   do {                                                                        \
     if (((h)->flags & UV_HANDLE_ACTIVE) == 0) break;                          \
     (h)->flags &= ~UV_HANDLE_ACTIVE;                                          \
     if (((h)->flags & UV_HANDLE_REF) != 0) uv__active_handle_rm(h);           \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__handle_ref(h)                                                     \
   do {                                                                        \
@@ -292,8 +286,7 @@ void uv__threadpool_cleanup(void);
     (h)->flags |= UV_HANDLE_REF;                                              \
     if (((h)->flags & UV_HANDLE_CLOSING) != 0) break;                         \
     if (((h)->flags & UV_HANDLE_ACTIVE) != 0) uv__active_handle_add(h);       \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__handle_unref(h)                                                   \
   do {                                                                        \
@@ -301,8 +294,7 @@ void uv__threadpool_cleanup(void);
     (h)->flags &= ~UV_HANDLE_REF;                                             \
     if (((h)->flags & UV_HANDLE_CLOSING) != 0) break;                         \
     if (((h)->flags & UV_HANDLE_ACTIVE) != 0) uv__active_handle_rm(h);        \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__has_ref(h)                                                        \
   (((h)->flags & UV_HANDLE_REF) != 0)
@@ -316,24 +308,21 @@ void uv__threadpool_cleanup(void);
     (h)->flags = UV_HANDLE_REF;  /* Ref the loop when active. */              \
     uv__queue_insert_tail(&(loop_)->handle_queue, &(h)->handle_queue);        \
     uv__handle_platform_init(h);                                              \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 /* Note: uses an open-coded version of SET_REQ_SUCCESS() because of
  * a circular dependency between src/uv-common.h and src/win/internal.h.
  */
-#define UV_REQ_INIT(req, typ)                                                \
+#define UV_REQ_INIT(req, typ)                                                 \
   do {                                                                        \
     (req)->type = (typ);                                                      \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__req_init(loop, req, typ)                                          \
   do {                                                                        \
     UV_REQ_INIT(req, typ);                                                    \
     uv__req_register(loop, req);                                              \
-  }                                                                           \
-  while (0)
+  } while (0)
 
 #define uv__get_internal_fields(loop)                                         \
   ((uv__loop_internal_fields_t*) loop->internal_fields)

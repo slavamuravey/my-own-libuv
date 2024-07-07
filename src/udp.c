@@ -27,9 +27,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
-#if defined(__MVS__)
-#include <xti.h>
-#endif
 #include <sys/un.h>
 
 #if defined(IPV6_JOIN_GROUP) && !defined(IPV6_ADD_MEMBERSHIP)
@@ -105,27 +102,31 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
     handle->send_queue_size -= uv__count_bufs(req->bufs, req->nbufs);
     handle->send_queue_count--;
 
-    if (req->bufs != req->bufsml)
+    if (req->bufs != req->bufsml) {
       uv__free(req->bufs);
+    }
     req->bufs = NULL;
 
-    if (req->send_cb == NULL)
+    if (req->send_cb == NULL) {
       continue;
+    }
 
     /* req->status >= 0 == bytes written
      * req->status <  0 == errno
      */
-    if (req->status >= 0)
+    if (req->status >= 0) {
       req->send_cb(req, 0);
-    else
+    } else {
       req->send_cb(req, req->status);
+    }
   }
 
   if (uv__queue_empty(&handle->write_queue)) {
     /* Pending queue and completion queue empty, stop watcher. */
     uv__io_stop(handle->loop, &handle->io_watcher, POLLOUT);
-    if (!uv__io_active(&handle->io_watcher, POLLIN))
+    if (!uv__io_active(&handle->io_watcher, POLLIN)) {
       uv__handle_stop(handle);
+    }
   }
 
   handle->flags &= ~UV_HANDLE_UDP_PROCESSING;
@@ -138,8 +139,9 @@ static void uv__udp_io(uv_loop_t* loop, uv__io_t* w, unsigned int revents) {
   handle = container_of(w, uv_udp_t, io_watcher);
   assert(handle->type == UV_UDP);
 
-  if (revents & POLLIN)
+  if (revents & POLLIN) {
     uv__udp_recvmsg(handle);
+  }
 
   if (revents & POLLOUT && !uv__is_closing(handle)) {
     uv__udp_sendmsg(handle);
@@ -159,8 +161,9 @@ static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf) {
 
   /* prepare structures for recvmmsg */
   chunks = buf->len / UV__UDP_DGRAM_MAXSIZE;
-  if (chunks > ARRAY_SIZE(iov))
+  if (chunks > ARRAY_SIZE(iov)) {
     chunks = ARRAY_SIZE(iov);
+  }
   for (k = 0; k < chunks; ++k) {
     iov[k].iov_base = buf->base + k * UV__UDP_DGRAM_MAXSIZE;
     iov[k].iov_len = UV__UDP_DGRAM_MAXSIZE;
@@ -174,21 +177,23 @@ static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf) {
     msgs[k].msg_hdr.msg_flags = 0;
   }
 
-  do
+  do {
     nread = recvmmsg(handle->io_watcher.fd, msgs, chunks, 0, NULL);
-  while (nread == -1 && errno == EINTR);
+  } while (nread == -1 && errno == EINTR);
 
   if (nread < 1) {
-    if (nread == 0 || errno == EAGAIN || errno == EWOULDBLOCK)
+    if (nread == 0 || errno == EAGAIN || errno == EWOULDBLOCK) {
       handle->recv_cb(handle, 0, buf, NULL, 0);
-    else
+    } else {
       handle->recv_cb(handle, UV__ERR(errno), buf, NULL, 0);
+    }
   } else {
     /* pass each chunk to the application */
     for (k = 0; k < (size_t) nread && handle->recv_cb != NULL; k++) {
       flags = UV_UDP_MMSG_CHUNK;
-      if (msgs[k].msg_hdr.msg_flags & MSG_TRUNC)
+      if (msgs[k].msg_hdr.msg_flags & MSG_TRUNC) {
         flags |= UV_UDP_PARTIAL;
+      }
 
       chunk_buf = uv_buf_init(iov[k].iov_base, iov[k].iov_len);
       handle->recv_cb(handle,
@@ -199,8 +204,9 @@ static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf) {
     }
 
     /* one last callback so the original buffer is freed */
-    if (handle->recv_cb != NULL)
+    if (handle->recv_cb != NULL) {
       handle->recv_cb(handle, 0, buf, NULL, UV_UDP_MMSG_FREE);
+    }
   }
   return nread;
 }
@@ -232,8 +238,9 @@ static void uv__udp_recvmsg(uv_udp_t* handle) {
 
     if (uv_udp_using_recvmmsg(handle)) {
       nread = uv__udp_recvmmsg(handle, &buf);
-      if (nread > 0)
+      if (nread > 0) {
         count -= nread;
+      }
       continue;
     }
 
@@ -250,15 +257,16 @@ static void uv__udp_recvmsg(uv_udp_t* handle) {
     while (nread == -1 && errno == EINTR);
 
     if (nread == -1) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
         handle->recv_cb(handle, 0, &buf, NULL, 0);
-      else
+      } else {
         handle->recv_cb(handle, UV__ERR(errno), &buf, NULL, 0);
-    }
-    else {
+      }
+    } else {
       flags = 0;
-      if (h.msg_flags & MSG_TRUNC)
+      if (h.msg_flags & MSG_TRUNC) {
         flags |= UV_UDP_PARTIAL;
+      }
 
       handle->recv_cb(handle, nread, &buf, (const struct sockaddr*) &peer, flags);
     }
@@ -283,13 +291,13 @@ static void uv__udp_sendmsg_one(uv_udp_t* handle, uv_udp_send_t* req) {
       h.msg_namelen = 0;
     } else {
       h.msg_name = &req->addr;
-      if (req->addr.ss_family == AF_INET6)
+      if (req->addr.ss_family == AF_INET6) {
         h.msg_namelen = sizeof(struct sockaddr_in6);
-      else if (req->addr.ss_family == AF_INET)
+      } else if (req->addr.ss_family == AF_INET) {
         h.msg_namelen = sizeof(struct sockaddr_in);
-      else if (req->addr.ss_family == AF_UNIX)
+      } else if (req->addr.ss_family == AF_UNIX) {
         h.msg_namelen = sizeof(struct sockaddr_un);
-      else {
+      } else {
         assert(0 && "unsupported address family");
         abort();
       }
@@ -297,13 +305,15 @@ static void uv__udp_sendmsg_one(uv_udp_t* handle, uv_udp_send_t* req) {
     h.msg_iov = (struct iovec*) req->bufs;
     h.msg_iovlen = req->nbufs;
 
-    do
+    do {
       size = sendmsg(handle->io_watcher.fd, &h, 0);
-    while (size == -1 && errno == EINTR);
+    } while (size == -1 && errno == EINTR);
 
-    if (size == -1)
-      if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)
+    if (size == -1) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS) {
         return;
+      }
+    }
 
     req->status = (size == -1 ? UV__ERR(errno) : size);
 
@@ -316,15 +326,15 @@ static void uv__udp_sendmsg_one(uv_udp_t* handle, uv_udp_send_t* req) {
     uv__queue_insert_tail(&handle->write_completed_queue, &req->queue);
     uv__io_feed(handle->loop, &handle->io_watcher);
 
-    if (uv__queue_empty(&handle->write_queue))
+    if (uv__queue_empty(&handle->write_queue)) {
       return;
+    }
 
     q = uv__queue_head(&handle->write_queue);
     req = uv__queue_data(q, uv_udp_send_t, queue);
   }
 }
 
-#if defined(__linux__) || defined(__FreeBSD__)
 static void uv__udp_sendmsg_many(uv_udp_t* handle) {
   uv_udp_send_t* req;
   struct mmsghdr h[20];
@@ -347,13 +357,13 @@ write_queue_drain:
       p->msg_hdr.msg_namelen = 0;
     } else {
       p->msg_hdr.msg_name = &req->addr;
-      if (req->addr.ss_family == AF_INET6)
+      if (req->addr.ss_family == AF_INET6) {
         p->msg_hdr.msg_namelen = sizeof(struct sockaddr_in6);
-      else if (req->addr.ss_family == AF_INET)
+      } else if (req->addr.ss_family == AF_INET) {
         p->msg_hdr.msg_namelen = sizeof(struct sockaddr_in);
-      else if (req->addr.ss_family == AF_UNIX)
+      } else if (req->addr.ss_family == AF_UNIX) {
         p->msg_hdr.msg_namelen = sizeof(struct sockaddr_un);
-      else {
+      } else {
         assert(0 && "unsupported address family");
         abort();
       }
@@ -362,13 +372,14 @@ write_queue_drain:
     h[pkts].msg_hdr.msg_iovlen = req->nbufs;
   }
 
-  do
+  do {
     npkts = sendmmsg(handle->io_watcher.fd, h, pkts, 0);
-  while (npkts == -1 && errno == EINTR);
+  } while (npkts == -1 && errno == EINTR);
 
   if (npkts < 1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS) {
       return;
+    }
     for (i = 0, q = uv__queue_head(&handle->write_queue);
          i < pkts && q != &handle->write_queue;
          ++i, q = uv__queue_head(&handle->write_queue)) {
@@ -400,31 +411,31 @@ write_queue_drain:
   }
 
   /* couldn't batch everything, continue sending (jump to avoid stack growth) */
-  if (!uv__queue_empty(&handle->write_queue))
+  if (!uv__queue_empty(&handle->write_queue)) {
     goto write_queue_drain;
+  }
 
   uv__io_feed(handle->loop, &handle->io_watcher);
 }
-#endif  /* __linux__ || ____FreeBSD__ */
 
 static void uv__udp_sendmsg(uv_udp_t* handle) {
   struct uv__queue* q;
   uv_udp_send_t* req;
 
-  if (uv__queue_empty(&handle->write_queue))
+  if (uv__queue_empty(&handle->write_queue)) {
     return;
+  }
 
   q = uv__queue_head(&handle->write_queue);
   req = uv__queue_data(q, uv_udp_send_t, queue);
 
-#if defined(__linux__) || defined(__FreeBSD__)
   /* Use sendmmsg() if this send request contains more than one datagram OR
    * there is more than one send request (because that automatically implies
    * there is more than one datagram.)
    */
-  if (req->nbufs != 1 || &handle->write_queue != uv__queue_next(&req->queue))
+  if (req->nbufs != 1 || &handle->write_queue != uv__queue_next(&req->queue)) {
     return uv__udp_sendmsg_many(handle);
-#endif
+  }
 
   return uv__udp_sendmsg_one(handle, req);
 }
@@ -444,26 +455,9 @@ static int uv__set_reuse(int fd) {
   int yes;
   yes = 1;
 
-#if defined(SO_REUSEPORT) && defined(__MVS__)
-  struct sockaddr_in sockfd;
-  unsigned int sockfd_len = sizeof(sockfd);
-  if (getsockname(fd, (struct sockaddr*) &sockfd, &sockfd_len) == -1)
-      return UV__ERR(errno);
-  if (sockfd.sin_family == AF_UNIX) {
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)))
-      return UV__ERR(errno);
-  } else {
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)))
-       return UV__ERR(errno);
+  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes))) {
+    return UV__ERR(errno);
   }
-#elif defined(SO_REUSEPORT) && !defined(__linux__) && !defined(__GNU__) && \
-	!defined(__sun__) && !defined(__DragonFly__)
-  if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)))
-    return UV__ERR(errno);
-#else
-  if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)))
-    return UV__ERR(errno);
-#endif
 
   return 0;
 }
@@ -475,18 +469,19 @@ static int uv__set_reuse(int fd) {
  * servers.
  */
 static int uv__set_recverr(int fd, sa_family_t ss_family) {
-#if defined(__linux__)
   int yes;
 
   yes = 1;
   if (ss_family == AF_INET) {
-    if (setsockopt(fd, IPPROTO_IP, IP_RECVERR, &yes, sizeof(yes)))
+    if (setsockopt(fd, IPPROTO_IP, IP_RECVERR, &yes, sizeof(yes))) {
       return UV__ERR(errno);
+    }
   } else if (ss_family == AF_INET6) {
-    if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVERR, &yes, sizeof(yes)))
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVERR, &yes, sizeof(yes))) {
        return UV__ERR(errno);
+    }
   }
-#endif
+
   return 0;
 }
 
@@ -500,32 +495,37 @@ int uv__udp_bind(uv_udp_t* handle,
   int fd;
 
   /* Check for bad flags. */
-  if (flags & ~(UV_UDP_IPV6ONLY | UV_UDP_REUSEADDR | UV_UDP_LINUX_RECVERR))
+  if (flags & ~(UV_UDP_IPV6ONLY | UV_UDP_REUSEADDR | UV_UDP_LINUX_RECVERR)) {
     return UV_EINVAL;
+  }
 
   /* Cannot set IPv6-only mode on non-IPv6 socket. */
-  if ((flags & UV_UDP_IPV6ONLY) && addr->sa_family != AF_INET6)
+  if ((flags & UV_UDP_IPV6ONLY) && addr->sa_family != AF_INET6) {
     return UV_EINVAL;
+  }
 
   fd = handle->io_watcher.fd;
   if (fd == -1) {
     err = uv__socket(addr->sa_family, SOCK_DGRAM, 0);
-    if (err < 0)
+    if (err < 0) {
       return err;
+    }
     fd = err;
     handle->io_watcher.fd = fd;
   }
 
   if (flags & UV_UDP_LINUX_RECVERR) {
     err = uv__set_recverr(fd, addr->sa_family);
-    if (err)
+    if (err) {
       return err;
+    }
   }
 
   if (flags & UV_UDP_REUSEADDR) {
     err = uv__set_reuse(fd);
-    if (err)
+    if (err) {
       return err;
+    }
   }
 
   if (flags & UV_UDP_IPV6ONLY) {
@@ -543,29 +543,30 @@ int uv__udp_bind(uv_udp_t* handle,
 
   if (bind(fd, addr, addrlen)) {
     err = UV__ERR(errno);
-    if (errno == EAFNOSUPPORT)
+    if (errno == EAFNOSUPPORT) {
       /* OSX, other BSDs and SunoS fail with EAFNOSUPPORT when binding a
        * socket created with AF_INET to an AF_INET6 address or vice versa. */
       err = UV_EINVAL;
+    }
     return err;
   }
 
-  if (addr->sa_family == AF_INET6)
+  if (addr->sa_family == AF_INET6) {
     handle->flags |= UV_HANDLE_IPV6;
+  }
 
   handle->flags |= UV_HANDLE_BOUND;
   return 0;
 }
 
 
-static int uv__udp_maybe_deferred_bind(uv_udp_t* handle,
-                                       int domain,
-                                       unsigned int flags) {
+static int uv__udp_maybe_deferred_bind(uv_udp_t* handle, int domain, unsigned int flags) {
   union uv__sockaddr taddr;
   socklen_t addrlen;
 
-  if (handle->io_watcher.fd != -1)
+  if (handle->io_watcher.fd != -1) {
     return 0;
+  }
 
   switch (domain) {
   case AF_INET:
@@ -595,22 +596,22 @@ static int uv__udp_maybe_deferred_bind(uv_udp_t* handle,
 }
 
 
-int uv__udp_connect(uv_udp_t* handle,
-                    const struct sockaddr* addr,
-                    unsigned int addrlen) {
+int uv__udp_connect(uv_udp_t* handle, const struct sockaddr* addr, unsigned int addrlen) {
   int err;
 
   err = uv__udp_maybe_deferred_bind(handle, addr->sa_family, 0);
-  if (err)
+  if (err) {
     return err;
+  }
 
   do {
     errno = 0;
     err = connect(handle->io_watcher.fd, addr, addrlen);
   } while (err == -1 && errno == EINTR);
 
-  if (err)
+  if (err) {
     return UV__ERR(errno);
+  }
 
   handle->flags |= UV_HANDLE_UDP_CONNECTED;
 
@@ -650,41 +651,19 @@ int uv__udp_connect(uv_udp_t* handle,
  */
 int uv__udp_disconnect(uv_udp_t* handle) {
     int r;
-#if defined(__MVS__)
-    struct sockaddr_storage addr;
-#else
     struct sockaddr addr;
-#endif
 
     memset(&addr, 0, sizeof(addr));
 
-#if defined(__MVS__)
-    addr.ss_family = AF_UNSPEC;
-#else
     addr.sa_family = AF_UNSPEC;
-#endif
 
     do {
       errno = 0;
-#ifdef __PASE__
-      /* On IBMi a connectionless transport socket can be disconnected by
-       * either setting the addr parameter to NULL or setting the
-       * addr_length parameter to zero, and issuing another connect().
-       * https://www.ibm.com/docs/en/i/7.4?topic=ssw_ibm_i_74/apis/connec.htm
-       */
-      r = connect(handle->io_watcher.fd, (struct sockaddr*) NULL, 0);
-#else
       r = connect(handle->io_watcher.fd, (struct sockaddr*) &addr, sizeof(addr));
-#endif
     } while (r == -1 && errno == EINTR);
 
     if (r == -1) {
-#if defined(BSD)  /* The macro BSD is from sys/param.h */
-      if (errno != EAFNOSUPPORT && errno != EINVAL)
-        return UV__ERR(errno);
-#else
       return UV__ERR(errno);
-#endif
     }
 
     handle->flags &= ~UV_HANDLE_UDP_CONNECTED;
@@ -705,8 +684,9 @@ int uv__udp_send(uv_udp_send_t* req,
 
   if (addr) {
     err = uv__udp_maybe_deferred_bind(handle, addr->sa_family, 0);
-    if (err)
+    if (err) {
       return err;
+    }
   }
 
   /* It's legal for send_queue_count > 0 even when the write_queue is empty;
@@ -717,17 +697,19 @@ int uv__udp_send(uv_udp_send_t* req,
 
   uv__req_init(handle->loop, req, UV_UDP_SEND);
   assert(addrlen <= sizeof(req->addr));
-  if (addr == NULL)
+  if (addr == NULL) {
     req->addr.ss_family = AF_UNSPEC;
-  else
+  } else {
     memcpy(&req->addr, addr, addrlen);
+  }
   req->send_cb = send_cb;
   req->handle = handle;
   req->nbufs = nbufs;
 
   req->bufs = req->bufsml;
-  if (nbufs > ARRAY_SIZE(req->bufsml))
+  if (nbufs > ARRAY_SIZE(req->bufsml)) {
     req->bufs = uv__malloc(nbufs * sizeof(bufs[0]));
+  }
 
   if (req->bufs == NULL) {
     uv__req_unregister(handle->loop, req);
@@ -747,8 +729,9 @@ int uv__udp_send(uv_udp_send_t* req,
      * away. In such cases the `io_watcher` has to be queued for asynchronous
      * write.
      */
-    if (!uv__queue_empty(&handle->write_queue))
+    if (!uv__queue_empty(&handle->write_queue)) {
       uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
+    }
   } else {
     uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
   }
@@ -769,13 +752,15 @@ int uv__udp_try_send(uv_udp_t* handle,
   assert(nbufs > 0);
 
   /* already sending a message */
-  if (handle->send_queue_count != 0)
+  if (handle->send_queue_count != 0) {
     return UV_EAGAIN;
+  }
 
   if (addr) {
     err = uv__udp_maybe_deferred_bind(handle, addr->sa_family, 0);
-    if (err)
+    if (err) {
       return err;
+    }
   } else {
     assert(handle->flags & UV_HANDLE_UDP_CONNECTED);
   }
@@ -791,10 +776,11 @@ int uv__udp_try_send(uv_udp_t* handle,
   } while (size == -1 && errno == EINTR);
 
   if (size == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)
+    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS) {
       return UV_EAGAIN;
-    else
+    } else {
       return UV__ERR(errno);
+    }
   }
 
   return size;
@@ -813,8 +799,9 @@ static int uv__udp_set_membership4(uv_udp_t* handle,
 
   if (interface_addr) {
     err = uv_inet_pton(AF_INET, interface_addr, &mreq.imr_interface.s_addr);
-    if (err)
+    if (err) {
       return err;
+    }
   } else {
     mreq.imr_interface.s_addr = htonl(INADDR_ANY);
   }
@@ -837,10 +824,6 @@ static int uv__udp_set_membership4(uv_udp_t* handle,
                  optname,
                  &mreq,
                  sizeof(mreq))) {
-#if defined(__MVS__)
-  if (errno == ENXIO)
-    return UV_ENODEV;
-#endif
     return UV__ERR(errno);
   }
 
@@ -859,8 +842,9 @@ static int uv__udp_set_membership6(uv_udp_t* handle,
   memset(&mreq, 0, sizeof mreq);
 
   if (interface_addr) {
-    if (uv_ip6_addr(interface_addr, 0, &addr6))
+    if (uv_ip6_addr(interface_addr, 0, &addr6)) {
       return UV_EINVAL;
+    }
     mreq.ipv6mr_interface = addr6.sin6_scope_id;
   } else {
     mreq.ipv6mr_interface = 0;
@@ -884,10 +868,6 @@ static int uv__udp_set_membership6(uv_udp_t* handle,
                  optname,
                  &mreq,
                  sizeof(mreq))) {
-#if defined(__MVS__)
-  if (errno == ENXIO)
-    return UV_ENODEV;
-#endif
     return UV__ERR(errno);
   }
 
@@ -895,12 +875,7 @@ static int uv__udp_set_membership6(uv_udp_t* handle,
 }
 
 
-#if !defined(__OpenBSD__) &&                                        \
-    !defined(__NetBSD__) &&                                         \
-    !defined(__ANDROID__) &&                                        \
-    !defined(__DragonFly__) &&                                      \
-    !defined(__QNX__) &&                                            \
-    !defined(__GNU__)
+#if !defined(__GNU__)
 static int uv__udp_set_source_membership4(uv_udp_t* handle,
                                           const struct sockaddr_in* multicast_addr,
                                           const char* interface_addr,
@@ -911,15 +886,17 @@ static int uv__udp_set_source_membership4(uv_udp_t* handle,
   int err;
 
   err = uv__udp_maybe_deferred_bind(handle, AF_INET, UV_UDP_REUSEADDR);
-  if (err)
+  if (err) {
     return err;
+  }
 
   memset(&mreq, 0, sizeof(mreq));
 
   if (interface_addr != NULL) {
     err = uv_inet_pton(AF_INET, interface_addr, &mreq.imr_interface.s_addr);
-    if (err)
+    if (err) {
       return err;
+    }
   } else {
     mreq.imr_interface.s_addr = htonl(INADDR_ANY);
   }
@@ -927,12 +904,13 @@ static int uv__udp_set_source_membership4(uv_udp_t* handle,
   mreq.imr_multiaddr.s_addr = multicast_addr->sin_addr.s_addr;
   mreq.imr_sourceaddr.s_addr = source_addr->sin_addr.s_addr;
 
-  if (membership == UV_JOIN_GROUP)
+  if (membership == UV_JOIN_GROUP) {
     optname = IP_ADD_SOURCE_MEMBERSHIP;
-  else if (membership == UV_LEAVE_GROUP)
+  } else if (membership == UV_LEAVE_GROUP) {
     optname = IP_DROP_SOURCE_MEMBERSHIP;
-  else
+  } else {
     return UV_EINVAL;
+  }
 
   if (setsockopt(handle->io_watcher.fd,
                  IPPROTO_IP,
@@ -957,15 +935,17 @@ static int uv__udp_set_source_membership6(uv_udp_t* handle,
   int err;
 
   err = uv__udp_maybe_deferred_bind(handle, AF_INET6, UV_UDP_REUSEADDR);
-  if (err)
+  if (err) {
     return err;
+  }
 
   memset(&mreq, 0, sizeof(mreq));
 
   if (interface_addr != NULL) {
     err = uv_ip6_addr(interface_addr, 0, &addr6);
-    if (err)
+    if (err) {
       return err;
+    }
     mreq.gsr_interface = addr6.sin6_scope_id;
   } else {
     mreq.gsr_interface = 0;
@@ -976,12 +956,13 @@ static int uv__udp_set_source_membership6(uv_udp_t* handle,
   memcpy(&mreq.gsr_group, multicast_addr, sizeof(*multicast_addr));
   memcpy(&mreq.gsr_source, source_addr, sizeof(*source_addr));
 
-  if (membership == UV_JOIN_GROUP)
+  if (membership == UV_JOIN_GROUP) {
     optname = MCAST_JOIN_SOURCE_GROUP;
-  else if (membership == UV_LEAVE_GROUP)
+  } else if (membership == UV_LEAVE_GROUP) {
     optname = MCAST_LEAVE_SOURCE_GROUP;
-  else
+  } else {
     return UV_EINVAL;
+  }
 
   if (setsockopt(handle->io_watcher.fd,
                  IPPROTO_IPV6,
@@ -1005,8 +986,9 @@ int uv__udp_init_ex(uv_loop_t* loop,
   fd = -1;
   if (domain != AF_UNSPEC) {
     fd = uv__socket(domain, SOCK_DGRAM, 0);
-    if (fd < 0)
+    if (fd < 0) {
       return fd;
+    }
   }
 
   uv__handle_init(loop, (uv_handle_t*)handle, UV_UDP);
@@ -1023,10 +1005,9 @@ int uv__udp_init_ex(uv_loop_t* loop,
 
 
 int uv_udp_using_recvmmsg(const uv_udp_t* handle) {
-#if defined(__linux__) || defined(__FreeBSD__)
-  if (handle->flags & UV_HANDLE_UDP_RECVMMSG)
+  if (handle->flags & UV_HANDLE_UDP_RECVMMSG) {
     return 1;
-#endif
+  }
   return 0;
 }
 
@@ -1035,23 +1016,28 @@ int uv_udp_open(uv_udp_t* handle, uv_os_sock_t sock) {
   int err;
 
   /* Check for already active socket. */
-  if (handle->io_watcher.fd != -1)
+  if (handle->io_watcher.fd != -1) {
     return UV_EBUSY;
+  }
 
-  if (uv__fd_exists(handle->loop, sock))
+  if (uv__fd_exists(handle->loop, sock)) {
     return UV_EEXIST;
+  }
 
   err = uv__nonblock(sock, 1);
-  if (err)
+  if (err) {
     return err;
+  }
 
   err = uv__set_reuse(sock);
-  if (err)
+  if (err) {
     return err;
+  }
 
   handle->io_watcher.fd = sock;
-  if (uv__udp_is_connected(handle))
+  if (uv__udp_is_connected(handle)) {
     handle->flags |= UV_HANDLE_UDP_CONNECTED;
+  }
 
   return 0;
 }
@@ -1067,13 +1053,15 @@ int uv_udp_set_membership(uv_udp_t* handle,
 
   if (uv_ip4_addr(multicast_addr, 0, &addr4) == 0) {
     err = uv__udp_maybe_deferred_bind(handle, AF_INET, UV_UDP_REUSEADDR);
-    if (err)
+    if (err) {
       return err;
+    }
     return uv__udp_set_membership4(handle, &addr4, interface_addr, membership);
   } else if (uv_ip6_addr(multicast_addr, 0, &addr6) == 0) {
     err = uv__udp_maybe_deferred_bind(handle, AF_INET6, UV_UDP_REUSEADDR);
-    if (err)
+    if (err) {
       return err;
+    }
     return uv__udp_set_membership6(handle, &addr6, interface_addr, membership);
   } else {
     return UV_EINVAL;
@@ -1086,12 +1074,7 @@ int uv_udp_set_source_membership(uv_udp_t* handle,
                                  const char* interface_addr,
                                  const char* source_addr,
                                  uv_membership membership) {
-#if !defined(__OpenBSD__) &&                                        \
-    !defined(__NetBSD__) &&                                         \
-    !defined(__ANDROID__) &&                                        \
-    !defined(__DragonFly__) &&                                      \
-    !defined(__QNX__) &&                                            \
-    !defined(__GNU__)
+#if !defined(__GNU__)
   int err;
   union uv__sockaddr mcast_addr;
   union uv__sockaddr src_addr;
@@ -1099,11 +1082,13 @@ int uv_udp_set_source_membership(uv_udp_t* handle,
   err = uv_ip4_addr(multicast_addr, 0, &mcast_addr.in);
   if (err) {
     err = uv_ip6_addr(multicast_addr, 0, &mcast_addr.in6);
-    if (err)
+    if (err) {
       return err;
+    }
     err = uv_ip6_addr(source_addr, 0, &src_addr.in6);
-    if (err)
+    if (err) {
       return err;
+    }
     return uv__udp_set_source_membership6(handle,
                                           &mcast_addr.in6,
                                           interface_addr,
@@ -1112,8 +1097,9 @@ int uv_udp_set_source_membership(uv_udp_t* handle,
   }
 
   err = uv_ip4_addr(source_addr, 0, &src_addr.in);
-  if (err)
+  if (err) {
     return err;
+  }
   return uv__udp_set_source_membership4(handle,
                                         &mcast_addr.in,
                                         interface_addr,
@@ -1132,20 +1118,22 @@ static int uv__setsockopt(uv_udp_t* handle,
                          socklen_t size) {
   int r;
 
-  if (handle->flags & UV_HANDLE_IPV6)
+  if (handle->flags & UV_HANDLE_IPV6) {
     r = setsockopt(handle->io_watcher.fd,
                    IPPROTO_IPV6,
                    option6,
                    val,
                    size);
-  else
+  } else {
     r = setsockopt(handle->io_watcher.fd,
                    IPPROTO_IP,
                    option4,
                    val,
                    size);
-  if (r)
+  }
+  if (r) {
     return UV__ERR(errno);
+  }
 
   return 0;
 }
@@ -1154,13 +1142,7 @@ static int uv__setsockopt_maybe_char(uv_udp_t* handle,
                                      int option4,
                                      int option6,
                                      int val) {
-#if defined(__sun) || defined(_AIX) || defined(__MVS__)
-  char arg = val;
-#elif defined(__OpenBSD__)
-  unsigned char arg = val;
-#else
   int arg = val;
-#endif
 
   if (val < 0 || val > 255)
     return UV_EINVAL;
@@ -1183,13 +1165,9 @@ int uv_udp_set_broadcast(uv_udp_t* handle, int on) {
 
 
 int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
-  if (ttl < 1 || ttl > 255)
+  if (ttl < 1 || ttl > 255) {
     return UV_EINVAL;
-
-#if defined(__MVS__)
-  if (!(handle->flags & UV_HANDLE_IPV6))
-    return UV_ENOTSUP;  /* zOS does not support setting ttl for IPv4 */
-#endif
+  }
 
 /*
  * On Solaris and derivatives such as SmartOS, the length of socket options
@@ -1197,25 +1175,10 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
  * so hardcode the size of these options on this platform,
  * and use the general uv__setsockopt_maybe_char call on other platforms.
  */
-#if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__) || defined(__QNX__)
-
-  return uv__setsockopt(handle,
-                        IP_TTL,
-                        IPV6_UNICAST_HOPS,
-                        &ttl,
-                        sizeof(ttl));
-
-#else /* !(defined(__sun) || defined(_AIX) || defined (__OpenBSD__) ||
-           defined(__MVS__) || defined(__QNX__)) */
-
   return uv__setsockopt_maybe_char(handle,
                                    IP_TTL,
                                    IPV6_UNICAST_HOPS,
                                    ttl);
-
-#endif /* defined(__sun) || defined(_AIX) || defined (__OpenBSD__) ||
-          defined(__MVS__) || defined(__QNX__) */
 }
 
 
@@ -1226,17 +1189,6 @@ int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl) {
  * IP_MULTICAST_TTL, so hardcode the size of the option in the IPv6 case,
  * and use the general uv__setsockopt_maybe_char call otherwise.
  */
-#if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__) || defined(__QNX__)
-  if (handle->flags & UV_HANDLE_IPV6)
-    return uv__setsockopt(handle,
-                          IP_MULTICAST_TTL,
-                          IPV6_MULTICAST_HOPS,
-                          &ttl,
-                          sizeof(ttl));
-#endif /* defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__) || defined(__QNX__) */
-
   return uv__setsockopt_maybe_char(handle,
                                    IP_MULTICAST_TTL,
                                    IPV6_MULTICAST_HOPS,
@@ -1251,17 +1203,6 @@ int uv_udp_set_multicast_loop(uv_udp_t* handle, int on) {
  * IP_MULTICAST_LOOP, so hardcode the size of the option in the IPv6 case,
  * and use the general uv__setsockopt_maybe_char call otherwise.
  */
-#if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__) || defined(__QNX__)
-  if (handle->flags & UV_HANDLE_IPV6)
-    return uv__setsockopt(handle,
-                          IP_MULTICAST_LOOP,
-                          IPV6_MULTICAST_LOOP,
-                          &on,
-                          sizeof(on));
-#endif /* defined(__sun) || defined(_AIX) ||defined(__OpenBSD__) ||
-    defined(__MVS__) || defined(__QNX__) */
-
   return uv__setsockopt_maybe_char(handle,
                                    IP_MULTICAST_LOOP,
                                    IPV6_MULTICAST_LOOP,
@@ -1343,15 +1284,18 @@ int uv__udp_recv_start(uv_udp_t* handle,
                        uv_udp_recv_cb recv_cb) {
   int err;
 
-  if (alloc_cb == NULL || recv_cb == NULL)
+  if (alloc_cb == NULL || recv_cb == NULL) {
     return UV_EINVAL;
+  }
 
-  if (uv__io_active(&handle->io_watcher, POLLIN))
+  if (uv__io_active(&handle->io_watcher, POLLIN)) {
     return UV_EALREADY;  /* FIXME(bnoordhuis) Should be UV_EBUSY. */
+  }
 
   err = uv__udp_maybe_deferred_bind(handle, AF_INET, 0);
-  if (err)
+  if (err) {
     return err;
+  }
 
   handle->alloc_cb = alloc_cb;
   handle->recv_cb = recv_cb;
@@ -1366,8 +1310,9 @@ int uv__udp_recv_start(uv_udp_t* handle,
 int uv__udp_recv_stop(uv_udp_t* handle) {
   uv__io_stop(handle->loop, &handle->io_watcher, POLLIN);
 
-  if (!uv__io_active(&handle->io_watcher, POLLOUT))
+  if (!uv__io_active(&handle->io_watcher, POLLOUT)) {
     uv__handle_stop(handle);
+  }
 
   handle->alloc_cb = NULL;
   handle->recv_cb = NULL;

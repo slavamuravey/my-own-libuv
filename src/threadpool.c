@@ -21,9 +21,7 @@
 
 #include "uv-common.h"
 
-#if !defined(_WIN32)
-# include "internal.h"
-#endif
+#include "internal.h"
 
 #include <stdlib.h>
 
@@ -98,8 +96,9 @@ static void worker(void* arg) {
 
       /* If we encountered a request to run slow I/O work but there is none
          to run, that means it's cancelled => Start over. */
-      if (uv__queue_empty(&slow_io_pending_wq))
+      if (uv__queue_empty(&slow_io_pending_wq)) {
         continue;
+      }
 
       is_slow_work = 1;
       slow_io_work_running++;
@@ -111,8 +110,9 @@ static void worker(void* arg) {
       /* If there is more slow I/O work, schedule it to be run as well. */
       if (!uv__queue_empty(&slow_io_pending_wq)) {
         uv__queue_insert_tail(&wq, &run_slow_work_message);
-        if (idle_threads > 0)
+        if (idle_threads > 0) {
           uv_cond_signal(&cond);
+        }
       }
     }
 
@@ -154,33 +154,32 @@ static void post(struct uv__queue* q, enum uv__work_kind kind) {
   }
 
   uv__queue_insert_tail(&wq, q);
-  if (idle_threads > 0)
+  if (idle_threads > 0) {
     uv_cond_signal(&cond);
+  }
   uv_mutex_unlock(&mutex);
 }
 
 
-#ifdef __MVS__
-/* TODO(itodorov) - zos: revisit when Woz compiler is available. */
-__attribute__((destructor))
-#endif
 void uv__threadpool_cleanup(void) {
   unsigned int i;
 
-  if (nthreads == 0)
+  if (nthreads == 0) {
     return;
+  }
 
-#ifndef __MVS__
   /* TODO(gabylb) - zos: revisit when Woz compiler is available. */
   post(&exit_message, UV__WORK_CPU);
-#endif
 
-  for (i = 0; i < nthreads; i++)
-    if (uv_thread_join(threads + i))
+  for (i = 0; i < nthreads; i++) {
+    if (uv_thread_join(threads + i)) {
       abort();
+    }
+  }
 
-  if (threads != default_threads)
+  if (threads != default_threads) {
     uv__free(threads);
+  }
 
   uv_mutex_destroy(&mutex);
   uv_cond_destroy(&cond);
@@ -198,12 +197,15 @@ static void init_threads(void) {
 
   nthreads = ARRAY_SIZE(default_threads);
   val = getenv("UV_THREADPOOL_SIZE");
-  if (val != NULL)
+  if (val != NULL) {
     nthreads = atoi(val);
-  if (nthreads == 0)
+  }
+  if (nthreads == 0) {
     nthreads = 1;
-  if (nthreads > MAX_THREADPOOL_SIZE)
+  }
+  if (nthreads > MAX_THREADPOOL_SIZE) {
     nthreads = MAX_THREADPOOL_SIZE;
+  }
 
   threads = default_threads;
   if (nthreads > ARRAY_SIZE(default_threads)) {
@@ -214,50 +216,51 @@ static void init_threads(void) {
     }
   }
 
-  if (uv_cond_init(&cond))
+  if (uv_cond_init(&cond)) {
     abort();
+  }
 
-  if (uv_mutex_init(&mutex))
+  if (uv_mutex_init(&mutex)) {
     abort();
+  }
 
   uv__queue_init(&wq);
   uv__queue_init(&slow_io_pending_wq);
   uv__queue_init(&run_slow_work_message);
 
-  if (uv_sem_init(&sem, 0))
+  if (uv_sem_init(&sem, 0)) {
     abort();
+  }
 
   config.flags = UV_THREAD_HAS_STACK_SIZE;
   config.stack_size = 8u << 20;  /* 8 MB */
 
-  for (i = 0; i < nthreads; i++)
-    if (uv_thread_create_ex(threads + i, &config, worker, &sem))
+  for (i = 0; i < nthreads; i++) {
+    if (uv_thread_create_ex(threads + i, &config, worker, &sem)) {
       abort();
+    }
+  }
 
-  for (i = 0; i < nthreads; i++)
+  for (i = 0; i < nthreads; i++) {
     uv_sem_wait(&sem);
+  }
 
   uv_sem_destroy(&sem);
 }
 
-
-#ifndef _WIN32
 static void reset_once(void) {
   uv_once_t child_once = UV_ONCE_INIT;
   memcpy(&once, &child_once, sizeof(child_once));
 }
-#endif
-
 
 static void init_once(void) {
-#ifndef _WIN32
   /* Re-initialize the threadpool after fork.
    * Note that this discards the global mutex and condition as well
    * as the work queue.
    */
-  if (pthread_atfork(NULL, NULL, &reset_once))
+  if (pthread_atfork(NULL, NULL, &reset_once)) {
     abort();
-#endif
+  }
   init_threads();
 }
 
@@ -286,14 +289,16 @@ static int uv__work_cancel(uv_loop_t* loop, uv_req_t* req, struct uv__work* w) {
   uv_mutex_lock(&w->loop->wq_mutex);
 
   cancelled = !uv__queue_empty(&w->wq) && w->work != NULL;
-  if (cancelled)
+  if (cancelled) {
     uv__queue_remove(&w->wq);
+  }
 
   uv_mutex_unlock(&w->loop->wq_mutex);
   uv_mutex_unlock(&mutex);
 
-  if (!cancelled)
+  if (!cancelled) {
     return UV_EBUSY;
+  }
 
   w->work = uv__cancelled;
   uv_mutex_lock(&loop->wq_mutex);
@@ -339,8 +344,9 @@ void uv__work_done(uv_async_t* handle) {
   if (nevents > 1) {
     /* Subtract 1 to counter the call to uv__work_done(). */
     uv__metrics_inc_events(loop, nevents - 1);
-    if (uv__get_internal_fields(loop)->current_timeout == 0)
+    if (uv__get_internal_fields(loop)->current_timeout == 0) {
       uv__metrics_inc_events_waiting(loop, nevents - 1);
+    }
   }
 }
 
@@ -358,8 +364,9 @@ static void uv__queue_done(struct uv__work* w, int err) {
   req = container_of(w, uv_work_t, work_req);
   uv__req_unregister(req->loop, req);
 
-  if (req->after_work_cb == NULL)
+  if (req->after_work_cb == NULL) {
     return;
+  }
 
   req->after_work_cb(req, err);
 }
@@ -369,8 +376,9 @@ int uv_queue_work(uv_loop_t* loop,
                   uv_work_t* req,
                   uv_work_cb work_cb,
                   uv_after_work_cb after_work_cb) {
-  if (work_cb == NULL)
+  if (work_cb == NULL) {
     return UV_EINVAL;
+  }
 
   uv__req_init(loop, req, UV_WORK);
   req->loop = loop;

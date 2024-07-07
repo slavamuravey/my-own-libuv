@@ -27,13 +27,15 @@ char* uv__strtok(char* str, const char* sep, char** itr) {
   char* tmp;
   char* start;
 
-  if (str == NULL)
+  if (str == NULL) {
     start = tmp = *itr;
-  else
+  } else {
     start = tmp = str;
+  }
 
-  if (tmp == NULL)
+  if (tmp == NULL) {
     return NULL;
+  }
 
   while (*tmp != '\0') {
     sep_itr = sep;
