@@ -31,3 +31,11 @@ add_executable(
     
     examples/ref-timer/main.c
 )
+
+add_executable(
+    signal 
+    
+    ${UV_SOURCES}
+    
+    examples/signal/main.c
+)

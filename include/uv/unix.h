@@ -36,10 +36,8 @@
 #include <termios.h>
 #include <pwd.h>
 
-#if !defined(__MVS__)
 #include <semaphore.h>
 #include <sys/param.h> /* MAXHOSTNAMELEN on Linux and the BSDs */
-#endif
 #include <pthread.h>
 #include <signal.h>
 

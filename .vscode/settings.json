@@ -17,6 +17,7 @@
         "statfs.h": "c",
         "grp.h": "c",
         "ipc.h": "c",
-        "sem.h": "c"
+        "sem.h": "c",
+        "pthread.h": "c"
     }
 }
